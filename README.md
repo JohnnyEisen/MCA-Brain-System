@@ -34,7 +34,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/YourUsername/MCA-Brain-System.git
+git clone https://github.com/JohnnyEisen/MCA-Brain-System.git
 cd MCA-Brain-System
 
 # 2. 安装依赖 (自动识别 CUDA 环境)

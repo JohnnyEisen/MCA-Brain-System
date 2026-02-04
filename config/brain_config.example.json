@@ -1,0 +1,30 @@
+{
+  "log_level": "INFO",
+  "log_json": false,
+
+  "thread_pool_size": 50,
+  "process_pool_size": 4,
+  "ui_refresh_ms": 1000,
+
+  "enable_disk_cache": true,
+  "cache_size_mb": 256,
+  "cache_max_entries": 120000,
+  "cache_ttl_seconds": 300,
+
+  "retry_max_attempts": 3,
+  "retry_initial_delay_seconds": 0.2,
+  "retry_max_delay_seconds": 5.0,
+  "retry_backoff_multiplier": 2.0,
+  "retry_jitter_ratio": 0.2,
+
+  "enable_metrics": true,
+  "enable_tracing": false,
+  "service_name": "brain",
+
+  "auto_load_dlcs": true,
+  "dlc_search_paths": ["./dlcs"],
+
+  "dlc_signature_required": false,
+  "dlc_signature_verify_if_present": true,
+  "dlc_public_key_pem_files": []
+}

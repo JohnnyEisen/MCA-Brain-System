@@ -27,6 +27,7 @@ setup(
     ]),
     include_package_data=True,
     python_requires=">=3.10",
+    url="https://github.com/JohnnyEisen/MCA-Brain-System",
     install_requires=requirements,
     entry_points={
         "console_scripts": [

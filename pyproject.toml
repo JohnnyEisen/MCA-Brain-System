@@ -9,7 +9,12 @@ description = "BrainCore + DLC framework with production hardening"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Brain AI Systems" }]
-license = { text = "Proprietary" }
+license = { text = "MIT" }
+
+[project.urls]
+Homepage = "https://github.com/JohnnyEisen/MCA-Brain-System"
+Repository = "https://github.com/JohnnyEisen/MCA-Brain-System.git"
+Issues = "https://github.com/JohnnyEisen/MCA-Brain-System/issues"
 
 dependencies = [
   "packaging>=23.2",

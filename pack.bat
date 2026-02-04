@@ -89,6 +89,8 @@ echo [INFO] Running PyInstaller...
     --exclude-module "PIL" ^
     --exclude-module "numpy" ^
     --exclude-module "scipy" ^
+    --exclude-module "psutil" ^
+    --exclude-module "packaging" ^
     --clean ^
     main.py
 

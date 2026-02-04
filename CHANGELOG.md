@@ -11,3 +11,8 @@
 ### History
 * This project evolved from internal version v4.4 (Code name: Neural Core).
 * Previous versions (v4.x) were internal prototypes.
+
+## [1.0.0] - 2026-02-05
+- Public Release
+- Privacy protocols engaged
+- Automated analysis engine active

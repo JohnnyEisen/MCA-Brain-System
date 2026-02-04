@@ -43,8 +43,18 @@ echo [INFO] Starting build process for MCA Brain System v1.0.0...
 :: Ensure PyInstaller is installed in the TARGET environment
 %PYTHON_CMD% -m pip show pyinstaller >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARN] PyInstaller not found in target python. Installing...
-    %PYTHON_CMD% -m pip install pyinstaller
+    echo [WARN] Environment appears incomplete. Installing dependencies...
+    
+    echo [1/2] Installing Build Tools (PyInstaller)...
+    %PYTHON_CMD% -m pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if %errorlevel% neq 0 (
+         echo [ERROR] Failed to install PyInstaller. Check network.
+         pause
+         exit /b 1
+    )
+
+    echo [2/2] Installing Project Dependencies (Safe to skip if already installed)...
+    %PYTHON_CMD% -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 )
 
 :: Clean previous builds
@@ -86,6 +96,9 @@ if %errorlevel% equ 0 (
     echo [SUCCESS] Core Build complete! App is in dist/MCA_Brain_System_v1.0/
     echo [INFO] Generatinig Expansion Pack (lib folder)...
     %PYTHON_CMD% "tools/collect_libs.py"
+    
+    echo [INFO] Creating Release Archives (Lite / Full)...
+    %PYTHON_CMD% "tools/package_release.py"
     
     echo [INFO] Cleaning up temp assets...
     if exist build_assets rmdir /s /q build_assets

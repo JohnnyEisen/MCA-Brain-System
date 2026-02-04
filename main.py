@@ -8,10 +8,18 @@ import os
 if getattr(sys, 'frozen', False):
     # 打包运行环境
     application_path = os.path.dirname(sys.executable)
+    
+    # 1. Hotfix (最高优先级)
     patch_dir = os.path.join(application_path, "patches")
     if os.path.exists(patch_dir):
         sys.path.insert(0, patch_dir)
         print(f"[Hotfix] Loaded patches from: {patch_dir}")
+        
+    # 2. External Libs (用于加载被排除的瘦身组件，如 numpy, PIL)
+    # 必须加入 sys.path，否则 import 会失败导致闪退
+    lib_dir = os.path.join(application_path, "lib")
+    if os.path.exists(lib_dir):
+        sys.path.append(lib_dir)
 else:
     # 开发环境 (可选：也可以支持 patches 目录调试)
     pass

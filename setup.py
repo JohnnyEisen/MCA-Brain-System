@@ -13,8 +13,8 @@ with open("requirements.txt", encoding="utf-8") as f:
 
 setup(
     name="mca-brain-system",
-    version="1.1.0",
-    description="Minecraft Crash Analyzer with Diagnostics Lab",
+    version="1.0.0",
+    description="Minecraft Crash Analyzer with Neural Core powered by Brain System",
     author="Brain AI Systems",
     packages=find_packages(include=[
         "mca_core", "mca_core.*", 

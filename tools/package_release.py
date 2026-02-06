@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 # Configuration
-VERSION = "v1.1.0"
+VERSION = "v1.0.0"
 GITHUB_LIMIT_BYTES = int(1.9 * 1024 * 1024 * 1024)
 BUFFER_SIZE = 1024 * 1024
 

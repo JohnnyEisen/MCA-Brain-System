@@ -39,8 +39,9 @@ ACTION_SIZE = 5     # 动作空间大小: [No_Op, Inject_Noise, Inject_Decoy, Mu
 
 class NeuralAdversaryEngine:
     """
-    自适应硬件对抗引擎。
+    自适应场景生成引擎 (Adaptive Scenario Engine)
     根据当前环境自动切换：Torch (GPU/CPU) -> NumPy (Matrix Math) -> Random (Fallback)
+    Used for generating complex test scenarios based on system state.
     """
     def __init__(self):
         self.backend = BACKEND
@@ -52,14 +53,14 @@ class NeuralAdversaryEngine:
             "compound": 6, "adversarial": 7
         }
         
-        print(f"[NeuralAdversary] 正在初始化对抗网络... 硬件后端: [{self.backend.upper()}] - ({DEVICE_INFO})")
+        print(f"[ScenarioEngine] Initializing backend... Type: [{self.backend.upper()}] - ({DEVICE_INFO})")
         
         if self.backend == "torch":
             self._init_torch()
         elif self.backend == "numpy":
             self._init_numpy()
         else:
-            print("[NeuralAdversary] 警告: 未检测到科学计算库，将使用随机策略和启发式算法。")
+            print("[ScenarioEngine] Info: Scientific libraries not found. Using heuristic fallback.")
 
     def _init_torch(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

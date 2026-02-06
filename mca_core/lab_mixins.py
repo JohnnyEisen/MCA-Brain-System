@@ -54,12 +54,12 @@ class LabMixin:
         
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
-        # === Neural Core Lab Header ===
+        # === Diagnostics Lab Header ===
         header_frame = ttk.Frame(main_frame)
         header_frame.pack(fill="x", pady=(0, 10))
         
-        ttk.Label(header_frame, text="Neural Core Lab", font=("Segoe UI", 16, "bold"), foreground="#2c3e50").pack(side="left")
-        ttk.Label(header_frame, text=" | 对抗生成与全链路压测", font=("Microsoft YaHei UI", 10), foreground="#7f8c8d").pack(side="left", padx=5, pady=(5,0))
+        ttk.Label(header_frame, text="Diagnostics Lab", font=("Segoe UI", 16, "bold"), foreground="#2c3e50").pack(side="left")
+        ttk.Label(header_frame, text=" | 场景生成与全链路压测", font=("Microsoft YaHei UI", 10), foreground="#7f8c8d").pack(side="left", padx=5, pady=(5,0))
 
         # 底部状态信息 (Moved up for layout)
         status_frame = ttk.Frame(header_frame)
@@ -117,11 +117,11 @@ class LabMixin:
             self.lab_running = True
             threading.Thread(target=self._run_lab_task, daemon=True).start()
 
-        btn = ttk.Button(ctrl_frame, text="⚡ 发起攻击测试 (Inject Faults)", command=_run_lab_test)
+        btn = ttk.Button(ctrl_frame, text="运行测试 (Inject Faults)", command=_run_lab_test)
         btn.grid(row=1, column=3, padx=20, sticky="e")
 
-        # === Battle Log ===
-        log_frame = ttk.LabelFrame(main_frame, text="对抗攻防实况日志", padding=10)
+        # === Run Log ===
+        log_frame = ttk.LabelFrame(main_frame, text="测试运行日志", padding=10)
         log_frame.pack(fill="both", expand=True, pady=(0, 10))
         
         self.lab_log = scrolledtext.ScrolledText(log_frame, height=12, state="disabled", font=("Consolas", 9), background="#000000", foreground="#00ff00")

@@ -1,18 +1,21 @@
 # Changelog
 
-## v1.0.0 - Initial Public Release (2026-02-05)
+## v1.1.0 - 2026-02-06
+
+### Refactoring & Professionalization
+* **Core Terminology Update**: Renamed "AI Engine" to "Diagnostics Lab" and "Analysis Engine" for clarity and professionalism.
+* **Build System Optimization**: Improved `package_release.py` with strict type hinting and robust error handling.
+* **Large File Support**: Implemented deterministic file splitting for GitHub release artifacts >2GB.
+* **UI Improvements**: Standardized labels in `app.py` and `lab_mixins.py` to remove marketing jargon.
+* **Environment Setup**: Refined batch scripts (`install_ai.bat`, `Start_Repair.bat`) for better user experience.
+
+## v1.0.0 - 2026-02-05
 
 ### Features
-* **Modular Architecture**: Introduced separate Core and Lib/DLC design patterns.
-* **Brain System**: Integrated deep learning based analysis engine.
-* **Automated Testing**: Added log generation tools and full unit test suite.
-* **Privacy Controls**: Hardened `.gitignore` and build pipeline to sanitize user data.
+* **Modular Architecture**: Core and external library separation.
+* **Analysis Engine**: Optional semantic analysis support via PyTorch.
+* **Automated Testing**: Log generation tools and unit tests.
+* **Privacy Controls**: Build pipeline and `.gitignore` hardening.
 
-### History
-* This project evolved from internal version v4.4 (Code name: Neural Core).
-* Previous versions (v4.x) were internal prototypes.
-
-## [1.0.0] - 2026-02-05
-- Public Release
-- Privacy protocols engaged
-- Automated analysis engine active
+### Notes
+* Project evolved from internal v4.x prototypes.

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brain-system"
-version = "1.0.0"
-description = "BrainCore + DLC framework with production hardening"
+version = "1.1.0"
+description = "Diagnostics Lab + DLC framework with production hardening"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Brain AI Systems" }]

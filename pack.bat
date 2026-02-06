@@ -38,24 +38,26 @@ set "PYTHON_CMD=python"
 
 :FOUND_PYTHON
 %PYTHON_CMD% --version
-echo [INFO] Starting build process for MCA Brain System v1.0.0...
+echo [INFO] Starting build process v1.0.0...
 
 :: Ensure PyInstaller is installed in the TARGET environment
 %PYTHON_CMD% -m pip show pyinstaller >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [WARN] Environment appears incomplete. Installing dependencies...
-    
-    echo [1/2] Installing Build Tools (PyInstaller)...
-    %PYTHON_CMD% -m pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple
-    if %errorlevel% neq 0 (
-         echo [ERROR] Failed to install PyInstaller. Check network.
-         pause
-         exit /b 1
-    )
+if %errorlevel% equ 0 goto :SKIP_INSTALL
 
-    echo [2/2] Installing Project Dependencies (Safe to skip if already installed)...
-    %PYTHON_CMD% -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+echo [WARN] Environment appears incomplete. Installing dependencies...
+echo [1/2] Installing Build Tools [PyInstaller]...
+%PYTHON_CMD% -m pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple
+if %errorlevel% neq 0 (
+        echo [ERROR] Failed to install PyInstaller. Check network.
+        pause
+        exit /b 1
 )
+
+echo [2/2] Installing Project Dependencies [Safe to skip if already installed]...
+%PYTHON_CMD% -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+:SKIP_INSTALL
+:: Clean previous builds
 
 :: Clean previous builds
 if exist build rmdir /s /q build
@@ -72,39 +74,24 @@ if %errorlevel% neq 0 (
 )
 
 :: Build command
-:: Use python -m PyInstaller to ensure we run with the correct interpreter
-echo [INFO] Running PyInstaller...
-%PYTHON_CMD% -m PyInstaller --noconfirm --onedir --windowed ^
-    --name "MCA_Brain_System_v1.0" ^
-    --icon "app_icon.ico" ^
-    --add-data "build_assets/analysis_data;analysis_data" ^
-    --add-data "build_assets/config;config" ^
-    --add-data "build_assets/plugins;plugins" ^
-    --additional-hooks-dir "hooks" ^
-    --hidden-import "brain_system" ^
-    --hidden-import "dlcs" ^
-    --hidden-import "mca_core.detectors" ^
-    --exclude-module "matplotlib" ^
-    --exclude-module "networkx" ^
-    --exclude-module "PIL" ^
-    --exclude-module "numpy" ^
-    --exclude-module "scipy" ^
-    --exclude-module "psutil" ^
-    --exclude-module "packaging" ^
-    --clean ^
-    main.py
+:: Logic moved to tools/run_build.py for stability and readability
+echo [INFO] Running PyInstaller (via tools/run_build.py)...
+%PYTHON_CMD% "tools/run_build.py"
 
-if %errorlevel% equ 0 (
-    echo [SUCCESS] Core Build complete! App is in dist/MCA_Brain_System_v1.0/
-    echo [INFO] Generatinig Expansion Pack (lib folder)...
-    %PYTHON_CMD% "tools/collect_libs.py"
-    
-    echo [INFO] Creating Release Archives (Lite / Full)...
-    %PYTHON_CMD% "tools/package_release.py"
-    
-    echo [INFO] Cleaning up temp assets...
-    if exist build_assets rmdir /s /q build_assets
-) else (
-    echo [ERROR] Build failed. Check the output above.
-)
+if %errorlevel% equ 0 goto :BUILD_SUCCESS
+echo [ERROR] Build failed. Check the output above.
+pause
+exit /b 1
+
+:BUILD_SUCCESS
+echo [SUCCESS] Core Build complete! App is in dist/MCA_Brain_System_v1.0/
+echo [INFO] Collecting external libraries (lib folder)...
+%PYTHON_CMD% "tools/collect_libs.py"
+
+echo [INFO] Creating release archives (lite / full)...
+%PYTHON_CMD% "tools/package_release.py"
+
+echo [INFO] Cleaning up temp assets...
+if exist build_assets rmdir /s /q build_assets
+
 pause

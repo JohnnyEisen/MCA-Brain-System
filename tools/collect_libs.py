@@ -4,7 +4,7 @@ import site
 import sys
 from pathlib import Path
 
-# 定义需要作为"扩展包"分离出去的笨重库
+# 定义需要作为外部依赖分离的库
 # 这些库将被从 EXE 中排除，并复制到 lib 文件夹中
 EXTENSIONS = [
     "matplotlib",
@@ -31,27 +31,27 @@ def get_package_path(package_name):
     return None
 
 def main():
-    print(">>> 开始构建扩展依赖包 (Expansion Pack) ...")
+    print("[Info] Collecting external libraries...")
     
     # 输出目录：dist/lib
     base_dir = Path(__file__).resolve().parent.parent
     dist_lib = base_dir / "dist" / "MCA_Brain_System_v1.0" / "lib"
     
     if dist_lib.exists():
-        print(f"[-] 清理旧目录: {dist_lib}")
+        print(f"[Info] Removing old directory: {dist_lib}")
         shutil.rmtree(dist_lib)
     dist_lib.mkdir(parents=True, exist_ok=True)
     
-    print(f"[+] 目标目录: {dist_lib}")
+    print(f"[Info] Target directory: {dist_lib}")
     
     success_count = 0
     for pkg in EXTENSIONS:
         src = get_package_path(pkg)
         if not src:
-            print(f"[!] 警告: 未找到库 {pkg}，跳过。")
+            print(f"[Warn] Library not found: {pkg}. Skipped.")
             continue
             
-        print(f"[*] Copying {pkg}...")
+        print(f"[Info] Copying {pkg}...")
         try:
             if src.is_dir():
                 shutil.copytree(src, dist_lib / pkg)
@@ -59,13 +59,13 @@ def main():
                 shutil.copy2(src, dist_lib)
             success_count += 1
         except Exception as e:
-            print(f"[x] 复制 {pkg} 失败: {e}")
+            print(f"[Error] Failed to copy {pkg}: {e}")
 
     print("-" * 40)
-    print(f"扩展包构建完成！共处理 {success_count} 个库。")
-    print(f"您可以选择：")
-    print(f"1. [轻量版] 删除 '{dist_lib}' 文件夹，仅分发 EXE。")
-    print(f"2. [完全版] 保留 '{dist_lib}' 文件夹与 EXE 一起分发。")
+    print(f"External library collection complete. Total: {success_count}")
+    print("Options:")
+    print(f"1. Lite: remove '{dist_lib}' and ship only the EXE")
+    print(f"2. Full: keep '{dist_lib}' with the EXE")
 
 if __name__ == "__main__":
     main()

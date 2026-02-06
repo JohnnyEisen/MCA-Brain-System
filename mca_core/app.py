@@ -28,7 +28,7 @@ except Exception:
     # 容错：路径异常时不阻塞启动
     pass
 
-# Brain System 已作为模块整合在根目录下
+# Brain System 模块集成在根目录下
 BRAIN_SYSTEM_DIR = ROOT_DIR
 
 try:
@@ -281,7 +281,7 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
 
         self._setup_detectors()
 
-        # 初始化 Brain Core 算力引擎
+        # 初始化分析引擎
         self.brain = None
         if HAS_BRAIN:
             try:
@@ -296,14 +296,14 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
                         brain_conf = None
                 
                 self.brain = BrainCore(config_path=brain_conf)
-                logger.info("Brain System 算力核心初始化成功")
+                logger.info("Analysis engine initialized")
 
-                # 延迟 AI 初始化，避免启动阶段卡死
+                # 延迟引擎初始化，避免启动阶段卡死
                 self._ai_init_started = False
                 self._ai_init_lock = threading.Lock()
 
             except Exception as e:
-                logger.warning(f"Brain System 初始化失败，将回退到默认线程池: {e}")
+                logger.warning(f"Analysis engine init failed; fallback to default pool: {e}")
                 self.brain = None
 
     def _load_dlcs_async(self):
@@ -311,10 +311,10 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         if not self.brain:
             return
             
-        logger.info("Starting background AI initialization...")
+        logger.info("Starting background engine initialization...")
         # UI 更新：初始化中，启动呼吸动画
         if hasattr(self, 'ai_status_var'):
-            self.root.after(0, lambda: self.ai_status_var.set("AI: Loading..."))
+            self.root.after(0, lambda: self.ai_status_var.set("Analysis: Loading..."))
             self.root.after(0, self._animate_ai_loading)
         
         # 尝试加载算力相关 DLC（按依赖顺序）
@@ -347,15 +347,15 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
                 )
                 logger.info("智能学习引擎已升级为：深度语义理解模式")
                 if hasattr(self, 'ai_status_var'):
-                    self.root.after(0, lambda: self._set_ai_ready("AI: 深度语义模型已就绪"))
+                    self.root.after(0, lambda: self._set_ai_ready("Analysis: 语义模型已就绪"))
         except ImportError as e:
             logger.warning(f"CodeBERT 引擎未启用 (ImportError): {e}")
             if hasattr(self, 'ai_status_var'):
-                self.root.after(0, lambda: self._set_ai_ready("AI: 仅正则模式", color="#e67e22"))
+                self.root.after(0, lambda: self._set_ai_ready("Analysis: 仅规则模式", color="#e67e22"))
         except Exception as dlc_error:
             logger.warning(f"Semantic Engine DLC 加载跳过: {dlc_error}")
             if hasattr(self, 'ai_status_var'):
-                self.root.after(0, lambda: self._set_ai_ready("AI: 模型加载失败", color="#e74c3c"))
+                self.root.after(0, lambda: self._set_ai_ready("Analysis: 模型加载失败", color="#e74c3c"))
 
         try:
             try:
@@ -411,7 +411,7 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
 
         try:
             if hasattr(self, 'ai_status_var'):
-                self.ai_status_var.set("AI: 初始化中...")
+                self.ai_status_var.set("Analysis: 初始化中...")
         except Exception:
             pass
 
@@ -800,18 +800,18 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         tools_menu.add_command(label="导出分析报告 (HTML/TXT)", command=self.export_analysis_report)
         tools_menu.add_command(label="查看分析历史", command=self.view_history)
         tools_menu.add_separator()
-        tools_menu.add_command(label="启动 AI 引擎", command=self._start_ai_init_if_needed)
+        tools_menu.add_command(label="启动分析引擎", command=self._start_ai_init_if_needed)
         tools_menu.add_separator()
         
         # Log Controls moved from Toolbar
         tools_menu.add_command(label="开启/停止日志实时跟踪 (Tail)", command=self._toggle_tail)
         
         tools_menu.add_separator()
-        # Neural Tools
-        neural_menu = tk.Menu(tools_menu, tearoff=0)
-        neural_menu.add_command(label="启动对抗生成器 (CLI)", command=self._launch_adversarial_gen)
-        neural_menu.add_command(label="GPU 环境配置向导", command=self._launch_gpu_setup)
-        tools_menu.add_cascade(label="神经对抗工具箱 (Neural Tools)", menu=neural_menu)
+        # Advanced Tools
+        adv_menu = tk.Menu(tools_menu, tearoff=0)
+        adv_menu.add_command(label="启动场景生成器 (CLI)", command=self._launch_adversarial_gen)
+        adv_menu.add_command(label="GPU 环境配置向导", command=self._launch_gpu_setup)
+        tools_menu.add_cascade(label="高级诊断工具箱 (Advanced Tools)", menu=adv_menu)
         
         menubar.add_cascade(label="工具", menu=tools_menu)
         
@@ -970,7 +970,7 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         # Right Side: Status Monitors
 
         # 2. 脑机接口状态监视器 (Brain Status Monitor)
-        # 布局: [AI Canvas] --neck-- [System Status]
+        # 布局: [Analysis Canvas] --neck-- [System Status]
         
         status_container = ttk.Frame(top_frame)
         status_container.pack(side="right", padx=6)
@@ -1048,9 +1048,9 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         # 初始化时，核心是暗的
         self.brain_canvas.pack(side="right")
 
-        # 初始化 AI 状态变量
+        # 初始化引擎状态变量
         if not hasattr(self, 'ai_status_var'):
-            self.ai_status_var = tk.StringVar(value="AI: 待启用(手动启动)")
+            self.ai_status_var = tk.StringVar(value="Analysis: 待启用(手动启动)")
 
         self.progress = ttk.Progressbar(self.scrollable_frame, mode="indeterminate")
         self.progress.pack(fill="x", padx=10, pady=(4, 6))
@@ -1138,7 +1138,7 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         except: pass
 
     def _animate_ai_loading(self, frame=0):
-        """AI 加载状态呼吸灯动画"""
+        """引擎加载状态呼吸灯动画"""
         val = self.ai_status_var.get()
         if "Loading" not in val and "初始化" not in val:
             return
@@ -2586,7 +2586,7 @@ class MinecraftCrashAnalyzer(AnalysisEventMixin, SettingsMixin, LabMixin):
         """执行基于历史模式的学习型分析"""
         if not self.crash_pattern_learner:
             return
-        # 需要时才启动 AI 引擎，避免启动阶段卡死
+        # 需要时才启动引擎，避免启动阶段卡死
         self._start_ai_init_if_needed()
             
         try:

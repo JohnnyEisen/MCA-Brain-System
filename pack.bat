@@ -66,7 +66,7 @@ if exist *.spec del *.spec
 
 :: Prepare Build Assets (Clean Data)
 echo [INFO] Preparing Clean Build Assets...
-%PYTHON_CMD% "tools/prepare_build.py"
+%PYTHON_CMD% "scripts/build/prepare_build.py"
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to prepare assets.
     pause
@@ -74,9 +74,9 @@ if %errorlevel% neq 0 (
 )
 
 :: Build command
-:: Logic moved to tools/run_build.py for stability and readability
-echo [INFO] Running PyInstaller (via tools/run_build.py)...
-%PYTHON_CMD% "tools/run_build.py"
+:: Logic moved to scripts/build/run_build.py for stability and readability
+echo [INFO] Running PyInstaller (via scripts/build/run_build.py)...
+%PYTHON_CMD% "scripts/build/run_build.py"
 
 if %errorlevel% equ 0 goto :BUILD_SUCCESS
 echo [ERROR] Build failed. Check the output above.
@@ -84,12 +84,12 @@ pause
 exit /b 1
 
 :BUILD_SUCCESS
-echo [SUCCESS] Core Build complete! App is in dist/MCA_Brain_System_v1.0/
+echo [SUCCESS] Core Build complete! App is in dist/MCA_Brain_System_v1.2.0/
 echo [INFO] Collecting external libraries (lib folder)...
-%PYTHON_CMD% "tools/collect_libs.py"
+%PYTHON_CMD% "scripts/build/collect_libs.py"
 
 echo [INFO] Creating release archives (lite / full)...
-%PYTHON_CMD% "tools/package_release.py"
+%PYTHON_CMD% "scripts/build/package_release.py"
 
 echo [INFO] Cleaning up temp assets...
 if exist build_assets rmdir /s /q build_assets

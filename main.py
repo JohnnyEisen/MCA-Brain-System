@@ -142,11 +142,6 @@ def _verify_patch_signature(filepath: str) -> bool:
     if signature in approved:
         return True
     
-    # 如果没有签名文件但有环境变量/密钥文件，也接受（仅开发模式）
-    if os.environ.get('MCA_PATCH_SECRET') or os.path.exists(os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__)), '.patch_key')):
-        print(f"[Warning] 补丁 {os.path.basename(filepath)} 无签名记录，但密钥已配置")
-        return True
-    
     print(f"[Security] 补丁 {os.path.basename(filepath)} 签名验证失败，未在批准列表中")
     return False
 

@@ -93,8 +93,6 @@ DATABASE_FILE: str = os.path.join(DATA_DIR, "mca_data.db")
 # Learning/Auto-test outputs
 AUTO_TESTS_DIR: str = os.path.join(DATA_DIR, "auto_tests")
 LAB_RUNS_DIR: str = os.path.join(DATA_DIR, "lab_runs")
-AUTO_TESTS_DIR: os.path.join(DATA_DIR, "auto_tests")
-LAB_RUNS_DIR: os.path.join(DATA_DIR, "lab_runs")
 LEARNED_PATTERNS_FILE: str = os.path.join(DATA_DIR, "learned_patterns.json")
 
 # Ensure directories exist

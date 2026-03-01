@@ -8,7 +8,7 @@ import os
 import shutil
 from typing import Generator, Iterable
 
-from config.constants import DEFAULT_MAX_BYTES
+from config.constants import DEFAULT_MAX_BYTES, MAX_FILE_SIZE_HARD_LIMIT
 
 
 # ==================== 流式读取 ====================
@@ -65,9 +65,19 @@ def read_text_limited(path: str, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
 
     Returns:
         文件内容字符串。
+
+    Raises:
+        ValueError: If file exceeds MAX_FILE_SIZE_HARD_LIMIT (V-008 DoS protection).
     """
+    # V-008 Fix: Enforce hard size limit before any reading to prevent DoS
+    size = os.path.getsize(path)
+
+    if size > MAX_FILE_SIZE_HARD_LIMIT:
+        raise ValueError(
+            f"文件超过硬性大小上限 ({size} bytes > {MAX_FILE_SIZE_HARD_LIMIT} bytes): {path}"
+        )
+
     try:
-        size = os.path.getsize(path)
         if size <= max_bytes:
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
@@ -93,9 +103,6 @@ def read_text_limited(path: str, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
         logging.getLogger(__name__).warning(f"智能读取失败，回退到简单读取: {e}")
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read(max_bytes)
-        # 回退到简单读取
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read(max_bytes)
 
 
 def read_text_head(path: str, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
@@ -116,7 +123,6 @@ def read_text_head(path: str, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"读取文件头部失败: {e}")
-        return ""
         return ""
 
 

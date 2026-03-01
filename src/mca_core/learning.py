@@ -107,11 +107,18 @@ class CrashPatternLearner:
         if removed > 0:
             print(f"DEBUG: Pruned {removed} low-activity patterns")
 
+    # Max input length for regex feature extraction to prevent ReDoS (V-007)
+    _MAX_EXTRACT_BYTES: int = 512 * 1024  # 512KB
+
     def _extract_features(self, crash_log: str) -> list[str]:
         """提取特征：包含异常类型、堆栈位置、关键错误描述。"""
         if not crash_log:
             return []
-        
+
+        # V-007 Fix: Limit input size to prevent ReDoS
+        if len(crash_log) > self._MAX_EXTRACT_BYTES:
+            crash_log = crash_log[:self._MAX_EXTRACT_BYTES]
+
         # 1. 提取异常类名 (Java Exceptions)
         exceptions = _RE_EXCEPTIONS.findall(crash_log)
         

@@ -418,22 +418,6 @@ class IntegrityChecker:
         shutil.rmtree(temp_dir)
         
         return zip_path
-        """获取当前关键文件的哈希值"""
-        import os
-        
-        hashes = {}
-        critical_files = [
-            'src/mca_core/security.py',
-            'src/config/constants.py',
-            'src/mca_core/launcher.py',
-        ]
-        
-        for rel_path in critical_files:
-            full_path = os.path.join(self.base_dir, rel_path)
-            if os.path.exists(full_path):
-                hashes[rel_path] = self.compute_file_hash(full_path)
-        
-        return hashes
 
 
 class GitHubAutoRepair:
@@ -587,11 +571,18 @@ def get_default_repair() -> GitHubAutoRepair | None:
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+                repo_owner = config.get("repo_owner", "")
+                repo_name = config.get("repo_name", "")
+                if not repo_owner or not repo_name:
+                    return None
+                # V-006 Fix: Use token_env field to read token from environment variable
+                token_env_name = config.get("token_env", "GITHUB_TOKEN")
+                token = os.environ.get(token_env_name) or None
                 return GitHubAutoRepair(
-                    repo_owner=config.get("repo_owner", "your_username"),
-                    repo_name=config.get("repo_name", "your_repo"),
+                    repo_owner=repo_owner,
+                    repo_name=repo_name,
                     branch=config.get("branch", "main"),
-                    token=config.get("token", token)
+                    token=token
                 )
         except:
             pass
@@ -665,98 +656,4 @@ class ExternalLibValidator:
                         warnings.append(f"{module_name}: {reason}")
         
         return (len(warnings) == 0, warnings)
-
-# ExternalLibValidator: Validates external library directory (V-003 fix)
-class ExternalLibValidator:
-    """Validates external library directory for security risks."""
-    
-    @classmethod
-    def validate_lib_directory(cls, lib_dir: str) -> tuple[bool, list]:
-        """
-        Validate lib directory for security issues.
-        
-        Returns:
-            (is_safe, list_of_warnings)
-        """
-        import os
-        warnings = []
-        
-        if not os.path.exists(lib_dir):
-            return (True, ["lib directory does not exist"])
-        
-        # Check for dangerous .pth files
-        for filename in os.listdir(lib_dir):
-            if filename.endswith('.pth'):
-                filepath = os.path.join(lib_dir, filename)
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        dangerous = ['import ', 'exec', 'eval', '__import__', 'os.system']
-                        for pattern in dangerous:
-                            if pattern in content:
-                                warnings.append(f"Dangerous .pth file: {filename}")
-                except Exception:
-                    pass
-        
-        return (len(warnings) == 0, warnings)
-
-
-# DebugDetector: Detects debugging/virtualization environment
-class DebugDetector:
-    """Detects debugging and virtualization environments."""
-    
-    @staticmethod
-    def is_debugging() -> bool:
-        """Check if running under debugger."""
-        import sys
-        # Check for common debugger indicators
-        gettrace = getattr(sys, 'gettrace', None)
-        if gettrace and gettrace():
-            return True
-        return False
-    
-    @staticmethod
-    def is_virtual_machine() -> bool:
-        """Check if running in a virtual machine."""
-        try:
-            import psutil
-            # Check for VM indicators
-            bios_version = psutil.LINUX_IOCONTROLS
-            # Simple check - could be enhanced
-            return False
-        except Exception:
-            return False
-
-
-# IntegrityChecker: Verifies file integrity
-class IntegrityChecker:
-    """Verifies application file integrity."""
-    
-    def __init__(self):
-        self.baseline = {}
-    
-    def verify_integrity(self) -> tuple[bool, list]:
-        """Verify file integrity."""
-        # Placeholder - returns valid
-        return (True, [])
-    
-    def load_baseline(self) -> dict:
-        """Load integrity baseline."""
-        return {}
-
-
-# get_default_repair: Default repair configuration
-def get_default_repair():
-    """Get default repair configuration."""
-    import os
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', 'repair_config.json')
-    if os.path.exists(config_path):
-        try:
-            import json
-            with open(config_path, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
-
 

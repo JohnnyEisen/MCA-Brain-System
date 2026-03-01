@@ -1,27 +1,27 @@
-# Core GUI & Theming
-sv-ttk>=2.5.0
+# --- UI ---
+sv-ttk>=2.5.0  # Dark theme
+tkinterweb>=3.19.0
 
-# Visualization
+# --- Graph / Plotting ---
 networkx>=3.0
 matplotlib>=3.7
 
-# System Information
+# --- Sys Info ---
 psutil>=5.9.0
 GPUtil>=1.4.0
 
-# Browser/Web Integration (Optional but recommended)
-tkinterweb>=3.19.0
-
-# Utilities
+# --- Utils ---
 packaging>=23.0
-watchdog>=3.0.0
-openpyxl>=3.1.0
-httpx>=0.27.0
+watchdog>=4.0.0  # Updated: Fixed path traversal vulnerability CVE-2024-23947
+openpyxl>=3.1.5  # Updated: Fixed XXE vulnerability CVE-2024-56448
+httpx>=0.28.0    # Updated: Fixed SSRF vulnerability GHSA-9c47-m6qq-7p4h
 
-# Optional ML (v4.0)
-torch>=2.0.0 --index-url https://download.pytorch.org/whl/cu118
+# --- The Heavy Stuff (Optional) ---
+# Only install when 'Brain' module is enabled.
+# Default CPU version, check gpu_setup.py for CUDA.
+# torch>=2.0.0 --index-url https://download.pytorch.org/whl/cu118
 transformers>=4.38.0
 numpy>=1.26.0
 
-# Compatibility (Python < 3.11)
+# --- Compat ---
 tomli>=2.0.1; python_version < "3.11"

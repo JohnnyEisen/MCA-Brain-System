@@ -1,0 +1,14 @@
+{
+    "repo_owner": "",
+    "repo_name": "MCA_Brain_System",
+    "branch": "main",
+    "token_env": "GITHUB_TOKEN",
+    "auto_repair": false,
+    "check_on_startup": false,
+    "critical_files": [
+        "src/mca_core/security.py",
+        "src/config/constants.py",
+        "src/mca_core/launcher.py"
+    ],
+    "_comment": "安全说明: token 现在从环境变量 GITHUB_TOKEN 读取，不要直接填写在配置文件中"
+}

@@ -1,34 +1,26 @@
-# --- Python 通用 ---
+# ==================== Python ====================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
 *.egg
 .pytest_cache/
 .coverage
+.mypy_cache/
+.ruff_cache/
 
-# --- 虚拟环境 ---
+# ==================== 虚拟环境 ====================
 venv/
 .venv/
 env/
 ENV/
 
-# --- IDE 与编辑器缓存 (严格模式) ---
+# ==================== IDE ====================
 .vscode/
 .idea/
 .vs/
@@ -37,103 +29,63 @@ ENV/
 *~
 *.bak
 *.tmp
-*.log
 .history/
-.ropeproject/
 
-# --- 文档生成构建 ---
-docs/_build/
-docs/build/
+# ==================== 项目特定数据 ====================
+# 数据库与用户配置
+data/history/
+data/*.db
+data/*.csv
+data/config.json
+data/learned_patterns.json
 
-# --- 项目特定：构建临时文件 ---
-build_assets/
-*.spec
-# 也可以保留 spec 文件以便他人复现构建，看您选择。建议保留。
-# !MCA_Brain_System_v4.4.spec
+# 必须保留规则和模型库配置
+!data/rules/
+!data/rules/*.json
 
-# --- 敏感数据与隐私 (白名单模式) ---
-# 0. 错误报告与日志 (包含各种格式的报表)
-Error/
-debug_logs/
+# 临时表格与日志
 *.log
-generated_*.log
+logs/
+data/*.log
 *.xlsx
-*.csv
+pep8_issues.json
+history.csv
 
-# 1. 默认屏蔽整个 analysis_data 目录
+# 个人测试数据与旧版残留
+Error/
 analysis_data/
-# 2. 仅允许上传通用规则库 (JSON)
-!analysis_data/diagnostic_rules.json
-!analysis_data/gpu_issues.json
-!analysis_data/loader_database.json
-!analysis_data/mod_conflicts.json
-!analysis_data/mod_database.json
-# (其他如 csv, log, test_runs 全部被屏蔽)
-
-# --- 脚本与批处理 (白名单模式) ---
-# 1. 屏蔽所有批处理脚本 (防止包含 C:\Users\xxx 等硬编码路径)
-*.bat
-*.ps1
-*.sh
-# 2. 仅允许构建所需的通用脚本(已人工审计，无硬编码路径)
-!pack.bat
-!docs/make.bat
-
-# --- 构建与环境 ---
-# 屏蔽 spec 文件 (可能包含绝对路径信息)
-*.spec
-# 屏蔽虚拟环境
-venv/
-env/
-.venv/
-
-# --- 工具脚本 ---
-# 屏蔽生成图标、本地安装等一次性工具
-generate_icon.py
-install_*.bat
-tools/gpu_setup.py
-
-# --- 核心数据保护 (实验数据) ---
+debug_logs/
 experiments/
-brain_core.log
-
-# --- 模型权重与大文件 ---
-# 如果您的 AI 模型文件很大，或者不想公开训练好的核心权重，请忽略它
 checkpoints/
 
-# --- 敏感配置 ---
-# 如果 brain_config.json 里有 API Key，请忽略它并上传一个 brain_config.example.json
-config/brain_config.json
-!config/brain_config.example.json
-
-# --- 临时脚本与文档 ---
-# 修复脚本通常绑定具体环境，不具备通用性
-scripts/repair_mca_env.py
-Start_Repair.bat
-# 所有的 debug 脚本通常只在开发时使用，不作为正式功能发布
-scripts/debug_*.py
-scripts/check_gpu.py
-# 个人需求文档与缓存图片
-需求.txt
-*.jpg
-*.png
-# 保留必要的图标
-!app_icon.ico
-
-# --- 部署与运维 ---
-# k8s 配置通常只在服务器用，如果不想公开您的服务器配置细节
+# ==================== 构建与分发 ====================
 deploy/
-
-# --- 二进制与杂项 (深度清理) ---
-# 忽略所有 whl 包文件夹
+releases/
 whl/
 *.whl
-# 忽略 pyinstaller 产生的 spec 文件 (除非您想让别人复现您的特定构建配置)
-# 这里选择保留，方便他人构建，如果不想也可以注释掉
-# *.spec
+.archive/
+分析/
 
-# --- OS 生成文件 ---
+# ==================== AI 核心模型 ====================
+# 如果后续下载了较大的本地模型，应被忽略
+models/
+*.onnx
+*.pt
+*.bin
+*.pth
+
+# ==================== 脚本与杂项 ====================
+# 如果有包含个人环境变量的脚本则忽略，只上传 example 模板
+# 这里放通用的忽略项
+*.jpg
+*.png
+!app_icon.ico
+需求.txt
+
+# ==================== AI工具链 ====================
+.opencode/
+
+# ==================== OS ====================
 Thumbs.db
 Desktop.ini
 .DS_Store
-releases/

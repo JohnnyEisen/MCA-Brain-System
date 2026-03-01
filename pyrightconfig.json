@@ -1,0 +1,7 @@
+{
+  "extraPaths": ["./src"],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.10",
+  "reportMissingImports": false,
+  "reportOptionalMemberAccess": false
+}

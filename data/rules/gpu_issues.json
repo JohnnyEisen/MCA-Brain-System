@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "vendor": "nvidia",
+      "match": [
+        "nvidia",
+        "geforce"
+      ],
+      "advice": "更新 NVIDIA 驱动到最新稳定版；尝试回退若最新驱动有问题；禁用光影或使用 Indium 替代 Iris。"
+    },
+    {
+      "vendor": "intel",
+      "match": [
+        "intel",
+        "iris graphics"
+      ],
+      "advice": "更新 Intel GPU 驱动；对集成显卡，降低渲染设置并禁用光影。"
+    },
+    {
+      "vendor": "amd",
+      "match": [
+        "amd",
+        "radeon"
+      ],
+      "advice": "更新 AMD 驱动；尝试使用兼容的着色器/渲染器组合。"
+    }
+  ]
+}

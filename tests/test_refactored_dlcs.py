@@ -7,11 +7,8 @@ import os
 # though usually pytest handles this relative to root.
 
 from brain_system.dlc import BrainDLC
-# Use try-except imports or direct imports if we are sure of the environment
-from dlcs.brain_dlc_hardware import HardwareAcceleratorDLC
-from dlcs.brain_dlc_nn import NeuralNetworkOperatorsDLC
-from dlcs.brain_dlc_workflow import NeuralWorkflowDLC
 from dlcs.brain_dlc_distributed import DistributedComputingDLC
+
 
 class MockBrainCore:
     def __init__(self):
@@ -25,18 +22,33 @@ class MockBrainCore:
         
     def log_warning(self, msg):
         pass
-    
+        
     def log_error(self, msg):
         pass
 
     def get_dlc(self, name):
         return self.dlcs.get(name)
 
+
 @pytest.fixture
 def mock_brain():
     return MockBrainCore()
 
+
+def test_distributed_dlc(mock_brain):
+    """分布式计算DLC不依赖numpy，可以直接测试。"""
+    dist_dlc = DistributedComputingDLC(mock_brain)
+    mock_brain.dlcs["Distributed Computing"] = dist_dlc
+    dist_dlc.initialize()
+    
+    assert dist_dlc.manifest.name == "Distributed Computing"
+
+
 def test_hardware_dlc(mock_brain):
+    """硬件加速DLC测试（需要numpy）。"""
+    pytest.importorskip("numpy", reason="numpy not installed")
+    
+    from dlcs.brain_dlc_hardware import HardwareAcceleratorDLC
     dlc = HardwareAcceleratorDLC(mock_brain)
     assert dlc.manifest.name == "Hardware Accelerator"
     dlc.initialize()
@@ -45,8 +57,15 @@ def test_hardware_dlc(mock_brain):
     # Test basics
     cpu = dlc.get_device("cpu")
     assert cpu.__class__.__name__ == "CPUDevice"
-    
+
+
 def test_nn_dlc(mock_brain):
+    """神经网络算子DLC测试（需要numpy）。"""
+    pytest.importorskip("numpy", reason="numpy not installed")
+    
+    from dlcs.brain_dlc_hardware import HardwareAcceleratorDLC
+    from dlcs.brain_dlc_nn import NeuralNetworkOperatorsDLC
+    
     # NN depends on Hardware
     hw_dlc = HardwareAcceleratorDLC(mock_brain)
     mock_brain.dlcs["Hardware Accelerator"] = hw_dlc
@@ -63,7 +82,15 @@ def test_nn_dlc(mock_brain):
     t = TensorNode([1.0, 2.0, 3.0])
     assert t.data[0] == 1.0
 
+
 def test_workflow_dlc(mock_brain):
+    """工作流DLC测试（需要numpy）。"""
+    pytest.importorskip("numpy", reason="numpy not installed")
+    
+    from dlcs.brain_dlc_hardware import HardwareAcceleratorDLC
+    from dlcs.brain_dlc_nn import NeuralNetworkOperatorsDLC
+    from dlcs.brain_dlc_workflow import NeuralWorkflowDLC
+    
     # Workflow depends on NN
     hw_dlc = HardwareAcceleratorDLC(mock_brain)
     mock_brain.dlcs["Hardware Accelerator"] = hw_dlc
@@ -78,10 +105,3 @@ def test_workflow_dlc(mock_brain):
     wf_dlc.initialize()
     
     assert wf_dlc.manifest.name == "Neural Workflow Manager"
-
-def test_distributed_dlc(mock_brain):
-    dist_dlc = DistributedComputingDLC(mock_brain)
-    mock_brain.dlcs["Distributed Computing"] = dist_dlc
-    dist_dlc.initialize()
-    
-    assert dist_dlc.manifest.name == "Distributed Computing"

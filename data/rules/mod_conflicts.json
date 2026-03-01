@@ -1,0 +1,38 @@
+{
+  "blacklist": [
+    {
+      "render": [
+        "iris",
+        "sodium",
+        "optifine"
+      ],
+      "world": [
+        "twilightforest",
+        "twilight-forest",
+        "thetwilightforest"
+      ],
+      "note": "Iris/Sodium/OptiFine 与 Twilight Forest 在部分版本存在渲染钩子或 GL 初始化冲突，建议移除光影或使用兼容补丁/特定版本。"
+    },
+    {
+      "render": [
+        "iris"
+      ],
+      "world": [
+        "betterend",
+        "byg"
+      ],
+      "note": "Iris 与 某些世界类MOD 在 Forge 环境下曾报告兼容性问题，按需排查。"
+    }
+  ],
+  "whitelist": [
+    {
+      "render": [
+        "indium"
+      ],
+      "world": [
+        "twilightforest"
+      ],
+      "note": "Indium 在部分情况下与 Twilight Forest 有更好兼容性（视版本而定）。"
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# ==================== 虚拟环境 ====================
+venv/
+.venv/
+env/
+ENV/
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+.history/
+
+# ==================== 敏感信息 ====================
+.env
+.env.*
+!.env.example
+*.local.json
+src/config/brain_config.json
+
+# ==================== 密钥与证书 ====================
+*.pem
+*.key
+*.crt
+*.p12
+*.der
+secrets/
+.secrets/
+credentials/
+
+# ==================== 项目特定数据 ====================
+# 数据目录整体忽略，但保留规则文件
+data/
+!data/rules/
+!data/rules/*.json
+!data/diagnostic_rules.json
+
+# 临时表格与日志
+*.log
+logs/
+*.xlsx
+pep8_issues.json
+history.csv
+
+# 个人测试数据与旧版残留
+Error/
+analysis_data/
+debug_logs/
+experiments/
+checkpoints/
+
+# ==================== 缓存与序列化 ====================
+.brain/
+cache/
+*.cache/
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+
+# ==================== 构建与分发 ====================
+deploy/
+releases/
+whl/
+*.whl
+.archive/
+分析/
+
+# ==================== AI 核心模型 ====================
+models/
+*.onnx
+*.pt
+*.bin
+*.pth
+*.safetensors
+
+# ==================== DLC 动态文件 ====================
+# 忽略用户下载/创建的 DLC，保留示例
+dlcs/*.py
+!dlcs/.gitkeep
+!dlcs/README*.md
+
+# 插件目录
+plugins/*.py
+!plugins/README_plugin_example.py
+
+# ==================== 脚本与杂项 ====================
+# 图片文件 - 根目录忽略，保留资源目录
+/*.jpg
+/*.png
+*.gif
+*.bmp
+*.ico
+!app_icon.ico
+!assets/
+!docs/images/
+
+# 其他
+需求.txt
+node_modules/
+
+# ==================== AI工具链 ====================
+.opencode/
+.claude/
+.cursor/
+
+# ==================== OS ====================
+Thumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/

@@ -120,6 +120,12 @@ python main.py
 
 完整记录请查看 [CHANGELOG.md](CHANGELOG.md)。
 
+### 版本口径说明
+
+- 当前发布版本：以 `pyproject.toml` 的 `project.version` 与 `CHANGELOG.md` 顶部条目为准。
+- 历史发布记录：仅在 `CHANGELOG.md` 维护完整版本序列（v1.0.0 到最新）。
+- 规划与模板文档：如 `ROADMAP_v1.2.md`、`REQUIREMENTS.md`、`docs/TEST_REPORT_TEMPLATE.md` 中的版本可能是历史阶段或占位符，不作为当前版本声明。
+
 ---
 
 ## 构建与分发

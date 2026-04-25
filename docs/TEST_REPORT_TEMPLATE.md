@@ -2,10 +2,12 @@
 
 ## 项目信息
 
+> 说明：本模板中的版本号字段均为占位符，填写时请使用当前发布版本。
+
 | 项目 | 内容 |
 |------|------|
 | **项目名称** | MCA Brain System |
-| **版本** | v1.1.0 |
+| **版本** | {{release_version}} |
 | **测试日期** | YYYY-MM-DD |
 | **测试人员** | [姓名] |
 | **测试环境** | Python 3.14 / Windows 11 |
@@ -184,7 +186,7 @@
 
 | 问题ID | 模块 | 描述 | 修复版本 |
 |--------|------|------|----------|
-| FIX-001 | mca_core/detectors | OutOfMemoryDetector模式匹配过于严格 | v1.1.1 |
+| FIX-001 | mca_core/detectors | OutOfMemoryDetector模式匹配过于严格 | {{fix_version}} |
 
 ---
 

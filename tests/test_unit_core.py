@@ -15,6 +15,7 @@ import re
 import sys
 import tempfile
 import unittest
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional, Protocol
 from unittest.mock import MagicMock
@@ -167,7 +168,7 @@ class TestRegexCacheGet(unittest.TestCase):
     """模式获取测试。"""
 
     def setUp(self):
-        RegexCache._cache = {}
+        RegexCache._cache = OrderedDict()  # type: ignore[assignment]
 
     def test_compile_and_cache(self):
         pattern = r'\d+'
@@ -192,7 +193,7 @@ class TestRegexCacheSearch(unittest.TestCase):
     """搜索方法测试。"""
 
     def setUp(self):
-        RegexCache._cache = {}
+        RegexCache._cache = OrderedDict()  # type: ignore[assignment]
 
     def test_search_match(self):
         text = "Hello 123 World"
@@ -210,7 +211,7 @@ class TestRegexCacheFindall(unittest.TestCase):
     """查找全部方法测试。"""
 
     def setUp(self):
-        RegexCache._cache = {}
+        RegexCache._cache = OrderedDict()  # type: ignore[assignment]
 
     def test_findall_multiple(self):
         text = "a1b2c3d4"
@@ -373,7 +374,7 @@ class TestMcaNormalizeModid(unittest.TestCase):
     """模组ID规范化测试。"""
 
     def setUp(self):
-        self.mods_keys = ["geckolib", "create", "draconicevolution"]
+        self.mods_keys = {"geckolib", "create", "draconicevolution"}
         self.mod_names = {"geckolib": "GeckoLib", "create": "Create"}
 
     def test_exact_match(self):
@@ -415,8 +416,7 @@ class TestDetectorRegistry(unittest.TestCase):
     """检测器注册表测试。"""
 
     def setUp(self):
-        DetectorRegistry._builtin_class_cache = set()
-        DetectorRegistry._inited = False
+        DetectorRegistry.reset()
 
     def test_empty_registry(self):
         registry = DetectorRegistry()

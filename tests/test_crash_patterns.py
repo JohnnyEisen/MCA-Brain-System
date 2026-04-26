@@ -118,11 +118,9 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(len(matches), 0)
     
     def test_none_log(self):
-        """None 输入应安全处理。"""
-        # CrashPatternLibrary 使用 'in' 操作符，None 会抛出 TypeError
-        # 这里测试当前行为，如果需要应该修改库来处理
-        with self.assertRaises(TypeError):
-            self.lib.match(None)
+        """None 输入应安全处理，返回空列表。"""
+        matches = self.lib.match(None)
+        self.assertEqual(len(matches), 0)
     
     def test_very_long_log(self):
         """超长日志应能正常处理。"""

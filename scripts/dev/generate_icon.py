@@ -10,6 +10,69 @@ except ImportError:
     exit(1)
 
 import random
+import struct
+import zlib
+
+
+def _build_png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    """Build a PNG chunk with CRC."""
+    length = struct.pack(">I", len(data))
+    crc = struct.pack(">I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
+    return length + chunk_type + data + crc
+
+
+def _inject_chunks_into_png(png_bytes: bytes) -> bytes:
+    """Inject iCCP and tRNS chunks right after IHDR.
+
+    Notes:
+    - iCCP uses a tiny fake profile payload to reproduce profile-related warnings.
+    - tRNS is intentionally added for an RGBA image, which is not valid with alpha.
+    """
+    signature = b"\x89PNG\r\n\x1a\n"
+    if not png_bytes.startswith(signature):
+        return png_bytes
+
+    # Find the end of IHDR chunk: signature(8) + len(4)+type(4)+data(13)+crc(4)
+    ihdr_end = 8 + 4 + 4 + 13 + 4
+    if len(png_bytes) <= ihdr_end:
+        return png_bytes
+
+    profile_name = b"BrokenProfile"
+    compressed_profile = zlib.compress(b"not-a-real-icc-profile")
+    iccp_data = profile_name + b"\x00" + b"\x00" + compressed_profile
+    iccp_chunk = _build_png_chunk(b"iCCP", iccp_data)
+
+    trns_data = b"\x00\x00"
+    trns_chunk = _build_png_chunk(b"tRNS", trns_data)
+
+    return png_bytes[:ihdr_end] + iccp_chunk + trns_chunk + png_bytes[ihdr_end:]
+
+
+def _inject_chunks_into_ico(ico_path: str) -> None:
+    """Patch first embedded PNG image inside ICO and inject iCCP/tRNS chunks."""
+    with open(ico_path, "rb") as f:
+        ico_bytes = f.read()
+
+    if len(ico_bytes) < 22:
+        return
+
+    image_size = struct.unpack_from("<I", ico_bytes, 14)[0]
+    image_offset = struct.unpack_from("<I", ico_bytes, 18)[0]
+    image_end = image_offset + image_size
+    if image_end > len(ico_bytes):
+        return
+
+    png_blob = ico_bytes[image_offset:image_end]
+    patched_png = _inject_chunks_into_png(png_blob)
+    if patched_png == png_blob:
+        return
+
+    patched_ico = bytearray(ico_bytes)
+    patched_ico[image_offset:image_end] = patched_png
+    struct.pack_into("<I", patched_ico, 14, len(patched_png))
+
+    with open(ico_path, "wb") as f:
+        f.write(patched_ico)
 
 
 def create_icon() -> None:
@@ -128,6 +191,7 @@ def create_icon() -> None:
     # Save
     try:
         img.save("app_icon.ico", format='ICO', sizes=[(256, 256)])
+        _inject_chunks_into_ico("app_icon.ico")
         print(f"Successfully generated app_icon.ico in {size}x{size}")
     except Exception as e:
         print(f"Error saving icon: {e}")

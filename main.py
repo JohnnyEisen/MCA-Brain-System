@@ -1,5 +1,12 @@
-import sys
+# ============================================================
+# PyQt6 高DPI支持 - 必须在任何导入之前设置
+# ============================================================
 import os
+os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '1'
+os.environ['QT_AUTO_SCREEN_SCALE_FACTOR'] = '1'
+os.environ['QT_SCALE_FACTOR_ROUNDING_POLICY'] = 'PassThrough'
+
+import sys
 import fnmatch
 import ast
 import hashlib
@@ -296,7 +303,30 @@ else:
 
 
 def main():
+    # Start PyQt6 Silicone & Capsule UI
     try:
+        import sys
+        import PyQt6
+        from PyQt6.QtWidgets import QApplication
+        from mca_core.main_window_pyqt import SiliconeCapsuleApp
+        print("[Launcher] Starting new Silicone & Capsule UI (PyQt6)...")
+        print("[Launcher] High DPI support enabled")
+        app = QApplication(sys.argv)
+        window = SiliconeCapsuleApp()
+        window.show()
+        sys.exit(app.exec())
+        return
+    except ImportError:
+        print("[Launcher] PyQt6 not installed or failed to load. Falling back to Tkinter...")
+
+    try:
+        # Enable DPI awareness for Tk path only.
+        try:
+            from mca_core.ui.dpi_awareness import enable_dpi_awareness
+            enable_dpi_awareness()
+        except Exception:
+            pass
+
         # Primary entry point
         from mca_core.launcher import launch_app
         launch_app()

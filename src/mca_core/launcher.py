@@ -13,9 +13,9 @@ import urllib.request
 if sys.platform == 'win32':
     try:
         if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stdout.reconfigure(encoding='utf-8')  # type: ignore
         if hasattr(sys.stderr, 'reconfigure'):
-            sys.stderr.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')  # type: ignore
     except Exception as e:
         print(f"Warning: Failed to set console encoding: {e}")
 
@@ -124,7 +124,15 @@ def launch_app():
             if importlib.util.find_spec(pkg) is None:
                 missing_deps.append(f"{pkg} ({desc})")
 
+    # Enable DPI awareness to make UI responsive to screen scaling
+    try:
+        from mca_core.ui.dpi_awareness import enable_dpi_awareness
+        enable_dpi_awareness()
+    except Exception:
+        pass
+
     root = tk.Tk()
+    root.withdraw() # Hide root window during initialization
 
     if missing_deps:
         py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -139,7 +147,7 @@ def launch_app():
                 f"2. Copy missing Python packages to 'lib'.\n"
                 f"3. Restart the program."
             )
-            messagebox.showwarning("Missing Dependencies", warning_msg)
+            messagebox.showwarning("Missing Dependencies", warning_msg, parent=root)
         else:
             py_path = sys.executable
             warning_msg = (
@@ -151,11 +159,15 @@ def launch_app():
                 f"Solution:\n"
                 f"pip install networkx matplotlib"
             )
-            messagebox.showwarning("Environment Warning", warning_msg)
+            messagebox.showwarning("Environment Warning", warning_msg, parent=root)
 
     # --- 3. Launch application ---
-    app = MinecraftCrashAnalyzer(root)
-    root.mainloop()
+    try:
+        app = MinecraftCrashAnalyzer(root)
+        root.deiconify() # Show main window
+        root.mainloop()
+    except (tk.TclError, KeyboardInterrupt):
+        pass # Handle case where window is closed early
 
 
 if __name__ == "__main__":

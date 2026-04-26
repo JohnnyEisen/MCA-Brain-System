@@ -24,6 +24,7 @@ from .observability import build_observability, start_span
 from .retry import RetryPolicy, async_retry
 from .security import SignatureVerificationError, load_public_keys_from_files, verify_dlc_signature
 from .config import ConsulConfigSource, FileConfigSource
+from .config_validator import build_config, validate_config
 from .ha import LeaderElectionConfig, LeaderElector
 
 
@@ -43,7 +44,7 @@ class BrainCore:
 
     def __init__(self, config_path: Optional[str] = None):
         self.name = "MCA Core Scheduler"
-        self.version = "1.0.0"
+        self.version = "1.5.0"
 
         self._config_path = config_path
         self.config = self._load_config(config_path)
@@ -70,14 +71,25 @@ class BrainCore:
             "avg_compute_time": 0.0,
             "memory_usage": 0.0,
             "cpu_usage": 0.0,
+            "thread_dispatched_tasks": 0,
+            "process_dispatched_tasks": 0,
         }
 
         self.monitor_task: Optional[asyncio.Task[None]] = None
         self._last_valid_config: dict[str, Any] = {}
 
         # 资源池（兼容 DLC 直接使用 thread_pool/process_pool 的写法）
-        self.thread_pool = ThreadPoolExecutor(max_workers=int(self.config.get("thread_pool_size", 50)))
-        process_pool_size = int(self.config.get("process_pool_size", multiprocessing.cpu_count()))
+        # 默认线程池大小：min(CPU核心数 * 4, 32)，避免过度创建线程
+        default_thread_pool_size = min(multiprocessing.cpu_count() * 4, 32)
+        thread_pool_size = int(self.config.get("thread_pool_size", default_thread_pool_size))
+        self.thread_pool = ThreadPoolExecutor(
+            max_workers=thread_pool_size,
+            thread_name_prefix="BrainWorker"
+        )
+        
+        # 进程池默认：min(CPU核心数, 8)，进程开销大
+        default_process_pool_size = min(multiprocessing.cpu_count(), 8)
+        process_pool_size = int(self.config.get("process_pool_size", default_process_pool_size))
         self.process_pool = ProcessPoolExecutor(max_workers=process_pool_size) if process_pool_size > 0 else None
         self._process_pool_max_workers = process_pool_size
 
@@ -108,57 +120,7 @@ class BrainCore:
     # ---------------- 配置 / 日志 ----------------
 
     def _load_config(self, config_path: Optional[str]) -> Dict[str, Any]:
-        default_config: Dict[str, Any] = {
-            "thread_pool_size": 50,
-            "process_pool_size": multiprocessing.cpu_count(),
-            "enable_disk_cache": True,
-            "cache_size_mb": 256,
-            "cache_max_entries": 10_000,
-            "cache_ttl_seconds": 300,
-            "log_level": "INFO",
-            "log_json": False,
-            "monitoring_interval": 5.0,
-            "auto_load_dlcs": True,
-            "dlc_search_paths": ["./dlcs"],
-            "dlc_strict_dependency_check": True,
-
-            # DLC 安全
-            "dlc_signature_required": False,
-            "dlc_signature_verify_if_present": True,
-            "dlc_public_key_pem_files": [],
-
-            # 可观测性
-            "enable_metrics": False,
-            "enable_tracing": False,
-            "service_name": "brain",
-
-            # 重试
-            "retry_max_attempts": 1,
-
-            # 配置热更新（可选）
-            "enable_config_watch": False,
-            "config_source": "file",  # file|consul
-            "config_poll_seconds": 1.0,
-            "consul_host": "127.0.0.1",
-            "consul_port": 8500,
-            "consul_key_prefix": "brain/config",
-
-            # HA（可选）
-            "leader_election_enabled": False,
-            "redis_url": "redis://localhost:6379/0",
-            "leader_lock_key": "brain:leader",
-        }
-
-        if config_path and os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    user_config = json.load(f)
-                if isinstance(user_config, dict):
-                    default_config.update(user_config)
-            except Exception as e:
-                logging.warning("加载配置文件失败: %s", e)
-
-        return default_config
+        return build_config(config_path)
 
     def _parse_dependency(self, raw: str) -> tuple[str, SpecifierSet]:
         """解析依赖声明。
@@ -328,15 +290,19 @@ class BrainCore:
         
         # 备份当前配置以便回滚
         old_config = dict(self.config)
+
+        # 在完整候选配置上做验证，避免只校验 patch 带来的遗漏。
+        candidate_config = dict(self.config)
+        candidate_config.update(new_config)
         
         # 验证新配置
-        validation_errors = self._validate_config(new_config)
+        validation_errors = self._validate_config(candidate_config)
         if validation_errors:
             logging.error("配置验证失败，拒绝更新: %s", validation_errors)
             return
         
         # 应用新配置
-        self.config.update(new_config)
+        self.config = candidate_config
 
         try:
             self._set_log_level(str(self.config.get("log_level", "INFO")))
@@ -390,55 +356,7 @@ class BrainCore:
         Returns:
             验证错误列表，空列表表示验证通过。
         """
-        errors: list[str] = []
-
-        # 验证缓存配置
-        if "cache_max_entries" in config:
-            val = config["cache_max_entries"]
-            if not isinstance(val, int) or val <= 0:
-                errors.append(f"cache_max_entries must be a positive integer, got {val}")
-
-        if "cache_ttl_seconds" in config:
-            val = config["cache_ttl_seconds"]
-            if not isinstance(val, (int, float)) or val <= 0:
-                errors.append(f"cache_ttl_seconds must be a positive number, got {val}")
-
-        # 验证重试配置
-        if "retry_max_attempts" in config:
-            val = config["retry_max_attempts"]
-            if not isinstance(val, int) or val <= 0:
-                errors.append(f"retry_max_attempts must be a positive integer, got {val}")
-
-        if "retry_initial_delay_seconds" in config:
-            val = config["retry_initial_delay_seconds"]
-            if not isinstance(val, (int, float)) or val < 0:
-                errors.append(f"retry_initial_delay_seconds must be a non-negative number, got {val}")
-
-        if "retry_backoff_multiplier" in config:
-            val = config["retry_backoff_multiplier"]
-            if not isinstance(val, (int, float)) or val < 1.0:
-                errors.append(f"retry_backoff_multiplier must be >= 1.0, got {val}")
-
-        # 验证线程池配置
-        if "thread_pool_size" in config:
-            val = config["thread_pool_size"]
-            if not isinstance(val, int) or val <= 0 or val > 1000:
-                errors.append(f"thread_pool_size must be between 1 and 1000, got {val}")
-
-        # 验证日志级别
-        if "log_level" in config:
-            val = config["log_level"]
-            valid_levels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-            if str(val).upper() not in valid_levels:
-                errors.append(f"log_level must be one of {valid_levels}, got {val}")
-
-        # 验证超时配置
-        if "task_default_timeout" in config:
-            val = config["task_default_timeout"]
-            if not isinstance(val, (int, float)) or val < 0:
-                errors.append(f"task_default_timeout must be a non-negative number, got {val}")
-
-        return errors
+        return validate_config(config)
 
     def get_config(self) -> dict[str, Any]:
         """获取当前配置的副本。
@@ -774,34 +692,32 @@ class BrainCore:
 
             loop = asyncio.get_running_loop()
 
-            # 兼容性策略：默认走线程池；可通过 task_id 前缀让 CPU 任务走进程池
-            use_process = False
-            cpu_prefixes = self.config.get("cpu_task_prefixes", ["cpu_", "cpu_task"])
-            if isinstance(cpu_prefixes, list):
-                for p in cpu_prefixes:
-                    if str(task_id).startswith(str(p)):
-                        use_process = True
-                        break
-
-            if use_process and self.process_pool is not None:
+            executor_kind = self._select_executor_kind(task_id=task_id, priority=priority, args=args, kwargs=kwargs)
+            if executor_kind == "process" and self.process_pool is not None:
+                self.performance_stats["process_dispatched_tasks"] += 1
                 return await loop.run_in_executor(self.process_pool, _invoke_callable, func, args, kwargs)
 
+            self.performance_stats["thread_dispatched_tasks"] += 1
             return await loop.run_in_executor(self.thread_pool, _invoke_callable, func, args, kwargs)
 
         start_time = time.time()
         
-        # 记录慢任务
+        SLOW_TASKS_MAX_SIZE = 100
+        
         def _check_slow_task(elapsed: float) -> None:
             if elapsed > slow_task_threshold:
                 logging.warning(
                     "Slow task detected: %s took %.2fs (threshold: %.2fs)",
                     task_id, elapsed, slow_task_threshold
                 )
-                self.performance_stats.setdefault("slow_tasks", []).append({
+                slow_tasks = self.performance_stats.setdefault("slow_tasks", [])
+                slow_tasks.append({
                     "task_id": task_id,
                     "duration": elapsed,
                     "timestamp": time.time(),
                 })
+                while len(slow_tasks) > SLOW_TASKS_MAX_SIZE:
+                    slow_tasks.pop(0)
 
         with start_span(self.obs, f"compute:{task_id}"):
             try:
@@ -866,24 +782,93 @@ class BrainCore:
 
         return result
 
+    def _estimate_payload_size(self, args: tuple[Any, ...], kwargs: Dict[str, Any]) -> int:
+        """粗略估算参数序列化体积，用于避免进程池过载。"""
+        try:
+            return len(repr((args, kwargs)).encode("utf-8", errors="ignore"))
+        except Exception:
+            return 0
+
+    def _matches_prefixes(self, value: str, prefixes: list[str]) -> bool:
+        for prefix in prefixes:
+            if value.startswith(str(prefix)):
+                return True
+        return False
+
+    def _select_executor_kind(
+        self,
+        *,
+        task_id: str,
+        priority: int,
+        args: tuple[Any, ...],
+        kwargs: Dict[str, Any],
+    ) -> str:
+        """根据任务提示、优先级与负载估计选择执行器类型。"""
+        task_name = str(task_id)
+        strategy = str(self.config.get("executor_routing_strategy", "balanced")).lower()
+
+        cpu_prefixes = self.config.get("cpu_task_prefixes", ["cpu_", "cpu_task", "thread_cpu_"])
+        if not isinstance(cpu_prefixes, list):
+            cpu_prefixes = ["cpu_", "cpu_task", "thread_cpu_"]
+
+        io_prefixes = self.config.get("io_task_prefixes", ["io_", "net_", "disk_"])
+        if not isinstance(io_prefixes, list):
+            io_prefixes = ["io_", "net_", "disk_"]
+
+        is_cpu_hint = self._matches_prefixes(task_name, [str(x) for x in cpu_prefixes])
+        is_io_hint = self._matches_prefixes(task_name, [str(x) for x in io_prefixes])
+
+        payload_limit = int(self.config.get("process_pool_payload_max_bytes", 262_144))
+        payload_size = self._estimate_payload_size(args, kwargs)
+        process_available = self.process_pool is not None and payload_size <= payload_limit
+
+        # 高优先级默认低延迟：优先线程池。
+        if priority >= 2:
+            return "thread"
+
+        # 明确低优先级 + CPU 提示：优先进程池。
+        if priority <= -1 and process_available and is_cpu_hint and not is_io_hint:
+            return "process"
+
+        if strategy == "latency":
+            return "thread"
+
+        if strategy == "throughput":
+            if process_available and is_cpu_hint and not is_io_hint:
+                return "process"
+            return "thread"
+
+        # balanced
+        if process_available and is_cpu_hint and not is_io_hint:
+            return "process"
+        return "thread"
+
+    _cache_key_cache: dict[int, str] = {}
+    _cache_key_cache_max_size: int = 1000
+
     def _generate_cache_key(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
         func_name = getattr(func, "__name__", str(func))
         
-        def _make_hashable(obj: Any) -> Any:
-            if isinstance(obj, (str, int, float, bool, type(None))):
-                return obj
-            elif isinstance(obj, (list, tuple)):
-                return tuple(_make_hashable(item) for item in obj)
-            elif isinstance(obj, dict):
-                return tuple(sorted((k, _make_hashable(v)) for k, v in obj.items()))
-            elif isinstance(obj, set):
-                return tuple(sorted(_make_hashable(item) for item in obj))
-            else:
-                return repr(obj)
-        
-        key_data = (func_name, _make_hashable(args), _make_hashable(kwargs))
-        key_str = json.dumps(key_data, sort_keys=True, default=str)
-        return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+        try:
+            key_repr = repr((func_name, args, kwargs))
+            cache_key_hash = hash(key_repr)
+            
+            if cache_key_hash in self._cache_key_cache:
+                return self._cache_key_cache[cache_key_hash]
+            
+            key_str = f"{func_name}:{key_repr}"
+            result = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+            
+            if len(self._cache_key_cache) >= self._cache_key_cache_max_size:
+                oldest_key = next(iter(self._cache_key_cache))
+                del self._cache_key_cache[oldest_key]
+            
+            self._cache_key_cache[cache_key_hash] = result
+            return result
+        except Exception:
+            key_data = (func_name, args, kwargs)
+            key_str = json.dumps(key_data, sort_keys=True, default=str)
+            return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
 
     # ---------------- 监控 / 生命周期 ----------------
 
@@ -1045,7 +1030,8 @@ class BrainCore:
         """
         try:
             health = self.health_check()
-            return health["status"] != "unhealthy"
+            status = str(health.get("status", "unhealthy"))
+            return status != "unhealthy"
         except Exception:
             return False
 

@@ -12,6 +12,19 @@ class InputSanitizer:
         return "\n".join(safe_lines)
 
     @staticmethod
+    def _is_within_base(path: str, base_dir: Optional[str]) -> bool:
+        """检查 path 是否位于 base_dir 边界内（防前缀绕过）。"""
+        if not base_dir:
+            return True
+        try:
+            real_path = os.path.realpath(path)
+            real_base = os.path.realpath(base_dir)
+            common = os.path.commonpath([real_path, real_base])
+            return common == real_base
+        except Exception:
+            return False
+
+    @staticmethod
     def validate_file_path(path: str, base_dir: Optional[str] = None) -> bool:
         """
         使用增强的安全性（防止目录遍历）验证文件路径。
@@ -20,15 +33,15 @@ class InputSanitizer:
         """
         if not path:
             return False
+        if "\x00" in path:
+            return False
         try:
             # 规范化路径以解析 .. 和符号链接
-            norm_path = os.path.abspath(os.path.normpath(path))
+            norm_path = os.path.realpath(os.path.abspath(os.path.normpath(path)))
             
             # 如果提供了 base_dir，则进行目录遍历检查
-            if base_dir:
-                abs_base = os.path.abspath(base_dir)
-                if not norm_path.startswith(abs_base):
-                    return False
+            if not InputSanitizer._is_within_base(norm_path, base_dir):
+                return False
 
             return os.path.exists(norm_path) and os.path.isfile(norm_path)
         except Exception:
@@ -42,16 +55,18 @@ class InputSanitizer:
         """
         if not path:
             return False
+        if "\x00" in path:
+            return False
         try:
-            norm_path = os.path.abspath(os.path.normpath(path))
-            if base_dir:
-                abs_base = os.path.abspath(base_dir)
-                if not norm_path.startswith(abs_base):
-                    return False
+            norm_path = os.path.realpath(os.path.abspath(os.path.normpath(path)))
+            if not InputSanitizer._is_within_base(norm_path, base_dir):
+                return False
             
             if create:
                 # 检查父目录是否存在且是一个目录
                 parent = os.path.dirname(norm_path)
+                if not InputSanitizer._is_within_base(parent, base_dir):
+                    return False
                 return os.path.exists(parent) and os.path.isdir(parent)
             
             return os.path.exists(norm_path) and os.path.isdir(norm_path)

@@ -3,4 +3,4 @@
 Minecraft Crash Analyzer with Brain AI System
 """
 
-__version__ = "1.1.0"
+__version__ = "1.5.0"

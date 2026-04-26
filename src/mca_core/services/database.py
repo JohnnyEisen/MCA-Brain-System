@@ -5,10 +5,67 @@ import sqlite3
 import threading
 import time
 import queue
+from collections import deque
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, Generator
 
 logger = logging.getLogger("mca_core.database")
+
+class ConnectionPool:
+    """SQLite 连接池，复用读取连接。"""
+    
+    def __init__(self, db_path: str, max_size: int = 5, timeout: float = 30.0):
+        self.db_path = db_path
+        self.max_size = max_size
+        self.timeout = timeout
+        self._pool: deque[sqlite3.Connection] = deque()
+        self._lock = threading.Lock()
+        self._created = 0
+    
+    def _create_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=self.timeout, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA read_uncommitted=ON;")
+        return conn
+    
+    def get(self) -> sqlite3.Connection:
+        with self._lock:
+            if self._pool:
+                return self._pool.popleft()
+            if self._created < self.max_size:
+                self._created += 1
+                return self._create_conn()
+        return self._create_conn()
+    
+    def put(self, conn: sqlite3.Connection) -> None:
+        with self._lock:
+            if len(self._pool) < self.max_size:
+                self._pool.append(conn)
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    
+    @contextmanager
+    def connection(self) -> Generator[sqlite3.Connection, None, None]:
+        conn = self.get()
+        try:
+            yield conn
+        finally:
+            self.put(conn)
+    
+    def close_all(self) -> None:
+        with self._lock:
+            while self._pool:
+                try:
+                    self._pool.popleft().close()
+                except Exception:
+                    pass
+
 
 class DatabaseManager:
     _instance = None
@@ -18,6 +75,7 @@ class DatabaseManager:
         self.db_path = db_path
         self._write_queue = queue.Queue()
         self._shutdown_event = threading.Event()
+        self._read_pool = ConnectionPool(db_path, max_size=5)
         self._ensure_tables()
         self._apply_pragma()
         self._writer_thread = threading.Thread(target=self._writer_loop, name="DB-Writer-Thread", daemon=True)
@@ -34,11 +92,13 @@ class DatabaseManager:
         self._shutdown_event.set()
         self._write_queue.put(None)
         self._writer_thread.join(timeout=2.0)
+        self._read_pool.close_all()
 
     def _get_conn(self, timeout: float = 30.0) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=timeout)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._read_pool.get()
+
+    def _return_conn(self, conn: sqlite3.Connection) -> None:
+        self._read_pool.put(conn)
 
     def _writer_loop(self):
         writer_conn = None
@@ -80,12 +140,17 @@ class DatabaseManager:
 
     def _apply_pragma(self) -> None:
         pragma_statements = ["PRAGMA journal_mode=WAL;", "PRAGMA synchronous=NORMAL;", "PRAGMA foreign_keys=ON;", "PRAGMA busy_timeout=30000;", "PRAGMA cache_size=-64000;"]
+        conn = None
         try:
-            with self._get_conn() as conn:
-                for pragma in pragma_statements: conn.execute(pragma)
-                conn.commit()
+            conn = self._get_conn()
+            for pragma in pragma_statements:
+                conn.execute(pragma)
+            conn.commit()
         except Exception as e:
             logger.warning(f"Failed to apply PRAGMA settings: {e}")
+        finally:
+            if conn:
+                self._return_conn(conn)
 
     def _ensure_tables(self) -> None:
         def _create_tables(conn):
@@ -93,19 +158,28 @@ class DatabaseManager:
             index_queries = ["CREATE INDEX IF NOT EXISTS idx_crash_created ON crash_history(created_at DESC)", "CREATE INDEX IF NOT EXISTS idx_crash_causes_crash_id ON crash_causes(crash_id)", "CREATE INDEX IF NOT EXISTS idx_mod_is_problematic ON mod_index(is_problematic)", "CREATE INDEX IF NOT EXISTS idx_mod_last_seen ON mod_index(last_seen)"]
             for query in schema_queries + index_queries: conn.execute(query)
             conn.commit()
+        conn = None
         try:
-            with self._get_conn() as conn: _create_tables(conn)
+            conn = self._get_conn()
+            _create_tables(conn)
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
+        finally:
+            if conn:
+                self._return_conn(conn)
 
     def _execute_read(self, query: str, params: tuple = ()) -> list[dict[str, Any]]:
+        conn = None
         try:
-            with self._get_conn() as conn:
-                cursor = conn.execute(query, params)
-                return [dict(row) for row in cursor.fetchall()]
+            conn = self._get_conn()
+            cursor = conn.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"DB Read Error: {e}")
             return []
+        finally:
+            if conn:
+                self._return_conn(conn)
 
     def write_analysis_result(self, file_path: str, summary: str, loader: str, mod_count: int, file_hash, causes: list, mods: list) -> int:
         def _task(conn, f_path, summ, lder, m_count, f_hash, cses, mds):

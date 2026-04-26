@@ -10,45 +10,75 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
+_SIZE_ESTIMATE_CACHE: dict[int, int] = {}
+_SIZE_CACHE_MAX = 1000
+
 
 def _estimate_size(obj: Any) -> int:
     """估算对象的内存大小（字节）。
-
-    这是一个粗略估算，用于内存限制。
-    对于基本类型使用精确值，复杂类型使用递归估算。
-
-    Args:
-        obj: 要估算的对象。
-
-    Returns:
-        估算的字节数。
+    
+    使用采样策略平衡精度和性能：
+    - 小型对象：精确计算
+    - 大型对象：采样估算
     """
-    # 基本类型直接使用 sys.getsizeof
-    if isinstance(obj, (str, bytes, int, float, bool, type(None))):
-        return sys.getsizeof(obj)
-
-    # 列表和元组
-    if isinstance(obj, (list, tuple)):
-        return sys.getsizeof(obj) + sum(_estimate_size(item) for item in obj[:100])  # 限制递归深度
-
-    # 字典
-    if isinstance(obj, dict):
-        size = sys.getsizeof(obj)
-        for i, (k, v) in enumerate(obj.items()):
-            if i >= 100:  # 限制递归深度
-                break
-            size += _estimate_size(k) + _estimate_size(v)
-        return size
-
-    # 集合
-    if isinstance(obj, (set, frozenset)):
-        return sys.getsizeof(obj) + sum(_estimate_size(item) for item in list(obj)[:100])
-
-    # 其他对象
-    try:
-        return sys.getsizeof(obj)
-    except Exception:
-        return 1024  # 默认估算 1KB
+    obj_id = id(obj)
+    if obj_id in _SIZE_ESTIMATE_CACHE:
+        return _SIZE_ESTIMATE_CACHE[obj_id]
+    
+    if isinstance(obj, (str, bytes)):
+        result = sys.getsizeof(obj)
+    elif isinstance(obj, (int, float, bool, type(None))):
+        result = sys.getsizeof(obj)
+    elif isinstance(obj, (list, tuple)):
+        base_size = sys.getsizeof(obj)
+        length = len(obj)
+        if length == 0:
+            result = base_size
+        elif length <= 20:
+            result = base_size + sum(_estimate_size(item) for item in obj)
+        else:
+            sample_size = min(length, 20)
+            step = max(1, length // sample_size)
+            sample_sum = sum(_estimate_size(obj[i]) for i in range(0, length, step))
+            result = base_size + (sample_sum * length // sample_size)
+    elif isinstance(obj, dict):
+        base_size = sys.getsizeof(obj)
+        length = len(obj)
+        if length == 0:
+            result = base_size
+        elif length <= 20:
+            result = base_size + sum(_estimate_size(k) + _estimate_size(v) for k, v in obj.items())
+        else:
+            items = list(obj.items())
+            step = max(1, length // 20)
+            sample_sum = sum(
+                _estimate_size(items[i][0]) + _estimate_size(items[i][1])
+                for i in range(0, length, step)
+            )
+            result = base_size + (sample_sum * length // (length // step))
+    elif isinstance(obj, (set, frozenset)):
+        base_size = sys.getsizeof(obj)
+        length = len(obj)
+        if length == 0:
+            result = base_size
+        elif length <= 20:
+            result = base_size + sum(_estimate_size(item) for item in obj)
+        else:
+            items = list(obj)
+            step = max(1, length // 20)
+            sample_sum = sum(_estimate_size(items[i]) for i in range(0, length, step))
+            result = base_size + (sample_sum * length // (length // step))
+    else:
+        try:
+            result = sys.getsizeof(obj)
+        except Exception:
+            result = 1024
+    
+    if len(_SIZE_ESTIMATE_CACHE) >= _SIZE_CACHE_MAX:
+        _SIZE_ESTIMATE_CACHE.pop(next(iter(_SIZE_ESTIMATE_CACHE)))
+    _SIZE_ESTIMATE_CACHE[obj_id] = result
+    
+    return result
 
 
 @dataclass(slots=True)
@@ -120,6 +150,7 @@ class LruTtlCache:
         self._dynamic_ttl_multiplier: float = dynamic_ttl_multiplier
         self._items: OrderedDict[str, CacheItem] = OrderedDict()
         self._current_bytes: int = 0
+        self._write_ops: int = 0
 
         self.hits: int = 0
         self.misses: int = 0
@@ -206,6 +237,10 @@ class LruTtlCache:
         """在需要时驱逐条目。"""
         self._purge_expired_front()
 
+        # 定期执行小预算全表过期清理，避免仅清理队首导致的过期项滞留。
+        if self._write_ops and (self._write_ops & 63) == 0:
+            self._purge_expired_sample(budget=64)
+
         # 按条目数驱逐
         while len(self._items) > self._max_entries:
             key, item = self._items.popitem(last=False)
@@ -218,6 +253,22 @@ class LruTtlCache:
                 key, item = self._items.popitem(last=False)
                 self._current_bytes -= item.size_bytes
                 self.evictions += 1
+
+    def _purge_expired_sample(self, budget: int = 64) -> None:
+        """有限预算扫描过期条目。"""
+        if not self._items or budget <= 0:
+            return
+
+        now = self._now()
+        removed = 0
+        for key, item in list(self._items.items()):
+            if self._is_expired(item, now):
+                self._items.pop(key, None)
+                self._current_bytes -= item.size_bytes
+                self.expired += 1
+                removed += 1
+                if removed >= budget:
+                    break
 
     def get(self, key: str) -> Any:
         """获取缓存值，支持动态 TTL。
@@ -243,6 +294,8 @@ class LruTtlCache:
         # 动态 TTL：增加访问计数
         if self._dynamic_ttl:
             item.access_count += 1
+            ttl_boost = min(item.access_count / 10.0, self._dynamic_ttl_multiplier - 1.0)
+            item.expires_at = now + (self._ttl_seconds * (1.0 + ttl_boost))
 
         self._items.move_to_end(key, last=True)
         self.hits += 1
@@ -273,6 +326,7 @@ class LruTtlCache:
         )
         self._current_bytes += size_bytes
         self._items.move_to_end(key, last=True)
+        self._write_ops += 1
         self._evict_if_needed()
     
     def refresh_ttl(self, key: str) -> bool:

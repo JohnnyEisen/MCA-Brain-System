@@ -46,6 +46,8 @@ class MainNotebook:
         self.graph_frame = None
         self.hw_text = None
         self.browser = None
+        self.plugin_tree = None
+        self.plugin_status_var = None
         
         # Vars
         self.layout_var = tk.StringVar(value="Hierarchy (树形)")
@@ -79,6 +81,11 @@ class MainNotebook:
         self.hw_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.hw_tab, text="硬件诊断")
         self._create_hw_tab()
+
+        # 6. Plugin Management
+        self.plugin_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.plugin_tab, text="插件管理")
+        self._create_plugin_tab()
 
     def _create_analysis_tab(self):
         self.result_text = scrolledtext.ScrolledText(self.analysis_tab, state="disabled", height=12, font=("Segoe UI", 10))
@@ -146,6 +153,142 @@ class MainNotebook:
         ctrl = ttk.Frame(self.hw_tab)
         ctrl.pack(fill="x", pady=6)
         ttk.Button(ctrl, text="复制 GL 片段", command=self.app._copy_gl_snippets).pack(side="right", padx=6)
+
+    def _create_plugin_tab(self):
+        top = ttk.Frame(self.plugin_tab, padding=8)
+        top.pack(fill="x")
+
+        ttk.Label(top, text="插件与 DLC 状态", font=("Segoe UI", 11, "bold")).pack(side="left")
+        ttk.Button(top, text="刷新", command=self._refresh_plugin_list).pack(side="right")
+        ttk.Button(top, text="启用全部插件", command=self._enable_all_plugins).pack(side="right", padx=(0, 6))
+        ttk.Button(top, text="启用所选", command=self._enable_selected_plugins).pack(side="right", padx=(0, 6))
+        ttk.Button(top, text="禁用所选", command=self._disable_selected_plugins).pack(side="right", padx=(0, 6))
+
+        self.plugin_status_var = tk.StringVar(value="正在加载插件状态...")
+        ttk.Label(top, textvariable=self.plugin_status_var, foreground="#666666").pack(side="right", padx=(0, 8))
+
+        body = ttk.Frame(self.plugin_tab, padding=(8, 0, 8, 8))
+        body.pack(fill="both", expand=True)
+
+        columns = ("name", "source", "kind", "status")
+        self.plugin_tree = ttk.Treeview(body, columns=columns, show="headings", height=12)
+        self.plugin_tree.heading("name", text="名称")
+        self.plugin_tree.heading("source", text="来源")
+        self.plugin_tree.heading("kind", text="类型")
+        self.plugin_tree.heading("status", text="状态")
+        self.plugin_tree.column("name", width=220, anchor="w")
+        self.plugin_tree.column("source", width=260, anchor="w")
+        self.plugin_tree.column("kind", width=90, anchor="center")
+        self.plugin_tree.column("status", width=90, anchor="center")
+
+        y_scroll = ttk.Scrollbar(body, orient="vertical", command=self.plugin_tree.yview)
+        self.plugin_tree.configure(yscrollcommand=y_scroll.set)
+
+        self.plugin_tree.pack(side="left", fill="both", expand=True)
+        y_scroll.pack(side="right", fill="y")
+
+        tip = (
+            "说明: 当前版本插件为后端静默加载。此页面用于查看已加载项，"
+            "不影响插件启停逻辑。"
+        )
+        ttk.Label(self.plugin_tab, text=tip, foreground="#777777", wraplength=900, padding=(8, 0, 8, 8)).pack(fill="x")
+
+        self._refresh_plugin_list()
+
+    def _refresh_plugin_list(self):
+        if not self.plugin_tree:
+            return
+
+        for item in self.plugin_tree.get_children():
+            self.plugin_tree.delete(item)
+
+        total = 0
+        disabled_plugins = getattr(self.app, "_disabled_plugins", set())
+
+        # Registered Python plugins
+        plugins = []
+        try:
+            registry = getattr(self.app, "plugin_registry", None)
+            if registry and hasattr(registry, "list"):
+                plugins = registry.list() or []
+        except Exception:
+            plugins = []
+
+        for plugin in plugins:
+            name = getattr(plugin, "__name__", "plugin_entry")
+            source = getattr(plugin, "__module__", "unknown")
+            plugin_key = f"{source}:{name}"
+            status = "已禁用" if plugin_key in disabled_plugins else "已启用"
+            self.plugin_tree.insert("", "end", iid=plugin_key, values=(name, source, "Plugin", status))
+            total += 1
+
+        # Loaded Brain DLC modules (if brain core initialized)
+        try:
+            brain = getattr(self.app, "brain", None)
+            dlcs = getattr(brain, "dlcs", {}) if brain else {}
+            if isinstance(dlcs, dict):
+                for dlc_name, dlc_obj in dlcs.items():
+                    source = getattr(dlc_obj, "__class__", type(dlc_obj)).__name__
+                    dlc_key = f"dlc:{dlc_name}"
+                    self.plugin_tree.insert("", "end", iid=dlc_key, values=(str(dlc_name), source, "DLC", "已启用"))
+                    total += 1
+        except Exception:
+            pass
+
+        if total == 0:
+            self.plugin_tree.insert("", "end", values=("(无)", "-", "-", "未检测到"))
+            self.plugin_status_var.set("未检测到已加载插件")
+        else:
+            self.plugin_status_var.set(f"共检测到 {total} 个已加载扩展")
+
+    def _disable_selected_plugins(self):
+        if not self.plugin_tree:
+            return
+        selected = self.plugin_tree.selection()
+        if not selected:
+            return
+
+        disabled_plugins = getattr(self.app, "_disabled_plugins", set())
+        changed = 0
+        for item_id in selected:
+            values = self.plugin_tree.item(item_id, "values")
+            if len(values) < 3 or values[2] != "Plugin":
+                continue
+            disabled_plugins.add(item_id)
+            changed += 1
+
+        self.app._disabled_plugins = disabled_plugins
+        self._refresh_plugin_list()
+        if self.plugin_status_var and changed:
+            self.plugin_status_var.set(f"已禁用 {changed} 个插件（会话级）")
+
+    def _enable_selected_plugins(self):
+        if not self.plugin_tree:
+            return
+        selected = self.plugin_tree.selection()
+        if not selected:
+            return
+
+        disabled_plugins = getattr(self.app, "_disabled_plugins", set())
+        changed = 0
+        for item_id in selected:
+            values = self.plugin_tree.item(item_id, "values")
+            if len(values) < 3 or values[2] != "Plugin":
+                continue
+            if item_id in disabled_plugins:
+                disabled_plugins.remove(item_id)
+                changed += 1
+
+        self.app._disabled_plugins = disabled_plugins
+        self._refresh_plugin_list()
+        if self.plugin_status_var and changed:
+            self.plugin_status_var.set(f"已启用 {changed} 个插件（会话级）")
+
+    def _enable_all_plugins(self):
+        self.app._disabled_plugins = set()
+        self._refresh_plugin_list()
+        if self.plugin_status_var:
+            self.plugin_status_var.set("所有插件已启用（会话级）")
 
     def setup_solution_browser(self, init_only=False):
         # Clear old

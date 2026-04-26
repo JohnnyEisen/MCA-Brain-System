@@ -5,43 +5,15 @@ Extracted from app.py for business logic and UI decoupling.
 """
 
 import os
-import csv
-import copy
 import threading
 import logging
-import sys
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List, Dict, Set, Any, Tuple
-from collections import Counter, defaultdict
-from datetime import datetime
+from collections import Counter, defaultdict, OrderedDict
 
-from config.constants import HISTORY_FILE
 from mca_core.errors import TaskCancelledError
 from mca_core.regex_cache import RegexCache
-from mca_core.history_manager import append_history, rotate_history
-
-
-logger = logging.getLogger(__name__)
-分析控制器模块。
-
-负责协调分析流程的执行、状态管理和结果处理。
-从 app.py 提取，实现业务逻辑与 UI 解耦。
-"""
-
-import os
-import csv
-import copy
-import threading
-import logging
-import sys
-from dataclasses import dataclass, field
-from typing import Optional, Callable, List, Dict, Set, Any, Tuple
-from collections import Counter, defaultdict
-from datetime import datetime
-
-from config.constants import HISTORY_FILE
-from mca_core.errors import TaskCancelledError
-from mca_core.regex_cache import RegexCache
+from mca_core.history_manager import append_history
 
 
 logger = logging.getLogger(__name__)
@@ -114,8 +86,9 @@ class AnalysisController:
         self._is_cancelled = is_cancelled_callback or (lambda: False)
         
         # 缓存与锁
-        self._analysis_cache: Dict[str, Dict] = {}
+        self._analysis_cache: OrderedDict[str, Dict] = OrderedDict()
         self._cache_lock = threading.RLock()
+        self._cache_max_size = 100
     
     def run_analysis(self, analyzer_context: Any = None) -> bool:
         """
@@ -202,7 +175,11 @@ class AnalysisController:
         
         # 9) 插件回调
         if self.plugin_registry:
+            disabled_plugins = getattr(analyzer_context, "_disabled_plugins", set())
             for plugin in self.plugin_registry.list():
+                plugin_key = f"{getattr(plugin, '__module__', 'unknown')}:{getattr(plugin, '__name__', 'plugin_entry')}"
+                if plugin_key in disabled_plugins:
+                    continue
                 try:
                     plugin(analyzer_context)
                 except Exception as e:
@@ -326,72 +303,12 @@ class AnalysisController:
         except Exception as e:
             logger.warning(f"Failed to record history: {e}")
     
-    def _rotate_history_if_needed(self):
-        """Rotate history file (delegated to history_manager)."""
-        rotate_history()
-    
-    def _write_to_database(self, summary: str) -> None:
-        """记录分析历史。"""
-        try:
-            summary = "; ".join(self.state.analysis_results[:6])[:800]
-            
-            # 轮转策略
-            self._rotate_history_if_needed()
-            
-            # 写入 CSV
-            with open(HISTORY_FILE, "a", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                current_time = datetime.now().isoformat()
-                writer.writerow([current_time, summary, self.state.file_path])
-            
-            # 写入数据库
-            self._write_to_database(summary)
-            
-        except Exception as e:
-            logger.warning(f"记录历史失败: {e}")
-    
-    def _rotate_history_if_needed(self):
-        """轮转历史文件。"""
-        try:
-            if os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > 5 * 1024 * 1024:
-                import zipfile
-                import time
-                import shutil
-                archive_path = os.path.join(os.path.dirname(HISTORY_FILE), "history_archive.zip")
-                
-                # 先写入 zip 归档
-                with zipfile.ZipFile(archive_path, "a", zipfile.ZIP_DEFLATED) as zf:
-                    zf.write(HISTORY_FILE, arcname=f"history_{int(time.time())}.csv")
-                
-                # 安全清空：先备份再清空
-                backup_path = HISTORY_FILE + ".tmp"
-                shutil.move(HISTORY_FILE, backup_path)
-                with open(HISTORY_FILE, "w", encoding="utf-8-sig", newline="") as f:
-                    pass
-                os.remove(backup_path)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"历史轮转失败: {e}")
-        """轮转历史文件。"""
-        try:
-            if os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > 5 * 1024 * 1024:
-                import zipfile
-                import time
-                archive_path = os.path.join(os.path.dirname(HISTORY_FILE), "history_archive.zip")
-                with zipfile.ZipFile(archive_path, "a", zipfile.ZIP_DEFLATED) as zf:
-                    zf.write(HISTORY_FILE, arcname=f"history_{int(time.time())}.csv")
-                with open(HISTORY_FILE, "w", encoding="utf-8-sig", newline="") as f:
-                    pass
-        except Exception:
-            pass
-    
     def _write_to_database(self, summary: str) -> None:
         """写入数据库（使用原子写入 API）。"""
         if not self.database_manager:
             return
         
         try:
-            # 构建原因列表
             causes_list = [
                 {"type": cause, "desc": f"Occurred {count} times", "confidence": 1.0}
                 for cause, count in self.state.cause_counts.items()
@@ -420,25 +337,35 @@ class AnalysisController:
     
     def _report_progress(self, value: float, message: str):
         """报告进度。"""
-        if self._progress:
-            if self._schedule_ui:
-                self._schedule_ui(lambda: self._progress(value, message))
-            else:
-                self._progress(value, message)
+        if self._progress is None:
+            return
+        progress_cb = self._progress
+        if self._schedule_ui is not None:
+            self._schedule_ui(lambda: progress_cb(value, message))
+        else:
+            progress_cb(value, message)
     
     def get_cached_result(self, checksum: str) -> Optional[Dict]:
         """获取缓存的分析结果（线程安全）。"""
         with self._cache_lock:
-            return self._analysis_cache.get(checksum)
+            value = self._analysis_cache.get(checksum)
+            if value is not None:
+                self._analysis_cache.move_to_end(checksum)
+            return value
     
     def cache_result(self, checksum: str) -> None:
         """缓存当前分析结果（线程安全）。"""
         if checksum:
             with self._cache_lock:
+                if checksum in self._analysis_cache:
+                    self._analysis_cache.move_to_end(checksum)
+                while len(self._analysis_cache) >= self._cache_max_size:
+                    self._analysis_cache.popitem(last=False)
+                mods_light = {k: list(v) for k, v in self.state.mods.items()} if self.state.mods else {}
                 self._analysis_cache[checksum] = {
                     'results': list(self.state.analysis_results),
-                    'mods': copy.deepcopy(dict(self.state.mods)),
-                    'dep_pairs': set(self.state.dependency_pairs),
+                    'mods': mods_light,
+                    'dep_pairs': frozenset(self.state.dependency_pairs),
                     'loader': self.state.loader_type,
-                    'causes': self.state.cause_counts.copy()
+                    'causes': dict(self.state.cause_counts)
                 }

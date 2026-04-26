@@ -107,9 +107,29 @@ def run_ui(*, config_path: Optional[str] = None) -> int:
 
     ui_cfg = UiConfig(refresh_ms=int(brain.config.get("ui_refresh_ms", 1000)))
 
+    # Enable DPI awareness
+    try:
+        from mca_core.ui.dpi_awareness import enable_dpi_awareness
+        enable_dpi_awareness()
+    except Exception:
+        pass
+
     root = tk.Tk()
     root.title("brain-system UI")
-    root.geometry("980x680")
+
+    # Make UI responsive to screen size by adaptive default geometry
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    
+    # Target 80% of screen size, but min 800x600, max 1280x850
+    adapt_w = min(max(int(screen_width * 0.8), 800), 1280)
+    adapt_h = min(max(int(screen_height * 0.8), 600), 850)
+    root.geometry(f"{adapt_w}x{adapt_h}")
+    root.minsize(800, 600)
+    
+    # Configure weights for root and main frame for responsiveness
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
 
     main = ttk.Frame(root, padding=10)
     main.pack(fill=tk.BOTH, expand=True)

@@ -133,6 +133,10 @@ def read_history(limit: int = 100) -> list:
         return []
     
     try:
+        file_size = os.path.getsize(HISTORY_FILE)
+        if file_size > 1024 * 1024:
+            return _read_history_tail(limit)
+        
         with open(HISTORY_FILE, "r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -140,6 +144,40 @@ def read_history(limit: int = 100) -> list:
             
     except Exception as e:
         logger.warning(f"Failed to read history: {e}")
+        return []
+
+
+def _read_history_tail(limit: int) -> list:
+    """从大文件尾部读取历史记录，避免加载整个文件。"""
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8-sig") as f:
+            lines: list[str] = []
+            f.seek(0, 2)
+            file_size = f.tell()
+            block_size = 8192
+            pos = file_size
+            
+            while pos > 0 and len(lines) < limit:
+                read_size = min(block_size, pos)
+                pos -= read_size
+                f.seek(pos)
+                chunk = f.read(read_size)
+                lines = chunk.splitlines() + lines
+            
+            rows = []
+            for line in lines[-limit * 2:]:
+                if line.strip():
+                    try:
+                        reader = csv.reader([line])
+                        row = next(reader, None)
+                        if row:
+                            rows.append(row)
+                    except Exception:
+                        pass
+            
+            return rows[-limit:]
+    except Exception as e:
+        logger.warning(f"Failed to read history tail: {e}")
         return []
 
 

@@ -13,7 +13,9 @@ from datetime import datetime
 from config.constants import AI_SEMANTIC_LIMIT
 
 MAX_PATTERNS = 500
+MAX_EMBEDDINGS = 100
 MIN_HIT_COUNT = 2
+EMBEDDING_MIN_HITS = 3
 FEATURE_WEIGHTS = {
     "trait": 3.0,
     "exception": 2.5,
@@ -149,13 +151,30 @@ class CrashPatternLearner:
 
     def _prune_patterns(self) -> None:
         if len(self._patterns) <= self.max_patterns:
+            self._prune_embeddings()
             return
         self._patterns.sort(key=lambda p: p.get("hit_count", 0), reverse=True)
         removed = len(self._patterns) - self.max_patterns
         self._patterns = self._patterns[:self.max_patterns]
         self._rebuild_index()
+        self._prune_embeddings()
         if removed > 0:
             logging.getLogger(__name__).debug(f"Pruned {removed} low-activity patterns")
+
+    def _prune_embeddings(self) -> None:
+        """清理低价值 embedding，限制内存占用。"""
+        embedding_count = sum(1 for p in self._patterns if "embedding" in p)
+        if embedding_count <= MAX_EMBEDDINGS:
+            return
+        
+        patterns_with_embedding = [(i, p) for i, p in enumerate(self._patterns) if "embedding" in p]
+        patterns_with_embedding.sort(key=lambda x: x[1].get("hit_count", 0), reverse=True)
+        
+        for i, (idx, p) in enumerate(patterns_with_embedding):
+            if i >= MAX_EMBEDDINGS:
+                hit_count = p.get("hit_count", 0)
+                if hit_count < EMBEDDING_MIN_HITS:
+                    p.pop("embedding", None)
 
     _MAX_EXTRACT_BYTES: int = 512 * 1024
 
@@ -165,66 +184,66 @@ class CrashPatternLearner:
         if len(crash_log) > self._MAX_EXTRACT_BYTES:
             crash_log = crash_log[:self._MAX_EXTRACT_BYTES]
 
-        features = []
+        features: set[str] = set()
         lower_log = crash_log.lower()
 
         exceptions = _RE_EXCEPTIONS.findall(crash_log)
         for exc in exceptions[:10]:
-            features.append(f"exception:{exc}")
+            features.add(f"exception:{exc}")
 
         stack_lines = _RE_STACK_LINES.findall(crash_log)
         for stack in stack_lines[:15]:
             parts = stack.rsplit('.', 1)
             if len(parts) > 1:
-                features.append(f"stack:{parts[0]}")
+                features.add(f"stack:{parts[0]}")
 
         for pattern, label in _CRITICAL_PATTERNS:
             if pattern.search(lower_log):
-                features.append(f"trait:{label}")
+                features.add(f"trait:{label}")
 
         mod_ids = _RE_MOD_ID.findall(crash_log)
         for mod_id in mod_ids[:5]:
-            features.append(f"mod:{mod_id.lower()}")
+            features.add(f"mod:{mod_id.lower()}")
 
         versions = _RE_VERSION.findall(crash_log)
         for ver in versions[:3]:
-            features.append(f"version:{ver}")
+            features.add(f"version:{ver}")
 
         java_vers = _RE_JAVA_VERSION.findall(crash_log)
         if java_vers:
-            features.append(f"java:{java_vers[0]}")
+            features.add(f"java:{java_vers[0]}")
 
         mem_matches = _RE_MEMORY.findall(crash_log)
         for mem in mem_matches[:2]:
-            features.append(f"memory:{mem}")
+            features.add(f"memory:{mem}")
 
         if "neoforge" in lower_log:
-            features.append("loader:neoforge")
+            features.add("loader:neoforge")
         elif "forge" in lower_log and "fml" in lower_log:
-            features.append("loader:forge")
+            features.add("loader:forge")
         elif "fabric" in lower_log and "quilt" not in lower_log:
-            features.append("loader:fabric")
+            features.add("loader:fabric")
         elif "quilt" in lower_log:
-            features.append("loader:quilt")
+            features.add("loader:quilt")
 
         error_codes = _RE_ERROR_CODE.findall(crash_log)
         for code in error_codes[:3]:
-            features.append(f"error_code:{code.upper()}")
+            features.add(f"error_code:{code.upper()}")
 
         thread_names = _RE_THREAD_NAME.findall(crash_log)
         for thread in thread_names[:3]:
             if thread.lower() not in ("main", "thread", "server", "client"):
-                features.append(f"thread:{thread.lower()}")
+                features.add(f"thread:{thread.lower()}")
 
         class_names = _RE_CLASS_NAME.findall(crash_log)
-        seen_packages = set()
+        seen_packages: set[str] = set()
         for cls in class_names[:10]:
             pkg = cls.split('.')[0] if '.' in cls else cls
             if pkg not in seen_packages and pkg not in ("java", "javax", "sun", "com", "org"):
                 seen_packages.add(pkg)
-                features.append(f"pkg:{pkg}")
+                features.add(f"pkg:{pkg}")
 
-        return list(set(features))
+        return list(features)
 
     def _get_feature_weight(self, feature: str) -> float:
         if feature.startswith("trait:"):
@@ -369,6 +388,9 @@ class CrashPatternLearner:
             self._prune_patterns()
             self._save_patterns()
 
+    _RE_DETAIL_FILTER = re.compile(r"(缺失|依赖|需要|前置|->|MOD|mod|冲突|不兼容|conflict|required)", re.IGNORECASE)
+    _RE_CRITICAL_FILTER = re.compile(r"(重复|duplicate|opengl|glfw|driver)", re.IGNORECASE)
+
     def suggest_solutions(self, crash_log: str) -> list[Solution]:
         if not self._patterns:
             return []
@@ -392,46 +414,43 @@ class CrashPatternLearner:
                 if not res_list:
                     return []
 
-                filtered_res = [
-                    line.strip() for line in res_list
-                    if line.strip() and "扫描完成" not in line and "Mod总数" not in line and "加载器" not in line
-                ]
+                detail_res: list[str] = []
+                other_critical: list[str] = []
+                
+                for line in res_list:
+                    stripped = line.strip()
+                    if not stripped or "扫描完成" in stripped or "Mod总数" in stripped or "加载器" in stripped:
+                        continue
+                    if self._RE_DETAIL_FILTER.search(stripped):
+                        detail_res.append(stripped)
+                    elif self._RE_CRITICAL_FILTER.search(stripped):
+                        other_critical.append(stripped)
 
-                if filtered_res:
-                    detail_res = [
-                        line for line in filtered_res
-                        if re.search(r"(缺失|依赖|需要|前置|->|MOD|mod|冲突|不兼容|conflict|required)", line, re.IGNORECASE)
-                    ]
+                final_picks: list[str] = []
+                seen: set[str] = set()
+                for item in detail_res + other_critical:
+                    if item not in seen:
+                        final_picks.append(item)
+                        seen.add(item)
 
-                    other_critical = [
-                        line for line in filtered_res
-                        if re.search(r"(重复|duplicate|opengl|glfw|driver)", line, re.IGNORECASE)
-                    ]
+                if not final_picks:
+                    filtered = [l.strip() for l in res_list if l.strip() and "扫描完成" not in l and "Mod总数" not in l and "加载器" not in l]
+                    final_picks = filtered[:5]
+                else:
+                    final_picks = final_picks[:10]
 
-                    final_picks: list[str] = []
-                    seen: set[str] = set()
-                    for item in detail_res + other_critical:
-                        if item not in seen:
-                            final_picks.append(item)
-                            seen.add(item)
+                summary_text = "\n".join(final_picks)
+                method = "AI 深度理解" if vector else "关键特征匹配"
 
-                    if not final_picks:
-                        final_picks = filtered_res[:5]
-                    else:
-                        final_picks = final_picks[:10]
+                if vector:
+                    logging.getLogger(__name__).debug(
+                        f"AI Diagnosis Match Score: {score:.4f} (Threshold: {threshold})"
+                    )
 
-                    summary_text = "\n".join(final_picks)
-                    method = "AI 深度理解" if vector else "关键特征匹配"
-
-                    if vector:
-                        logging.getLogger(__name__).debug(
-                            f"AI Diagnosis Match Score: {score:.4f} (Threshold: {threshold})"
-                        )
-
-                    return [Solution(
-                        text=f"[{method} {score:.0%}] 历史修复建议:\n{summary_text}",
-                        confidence=score
-                    )]
+                return [Solution(
+                    text=f"[{method} {score:.0%}] 历史修复建议:\n{summary_text}",
+                    confidence=score
+                )]
 
         return []
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Protocol
+from typing import List, Protocol, Any
 
 
 class AnalysisStep(Protocol):
-    def should_execute(self, context) -> bool:
+    def should_execute(self, context: Any) -> bool:
         ...
 
-    def execute(self, crash_log: str, context):
+    def execute(self, crash_log: str, context: Any) -> "AnalysisResult":
         ...
 
 

@@ -33,10 +33,7 @@ class HeadlessAnalyzer:
         self.max_bytes = max_bytes
         self.head_only = head_only
         
-        # Mimic App Structure for Detectors
-        self.detector_registry = DetectorRegistry()
-        # Register all core detectors (Auto-discovered)
-        self.detector_registry.load_builtins()
+        self.detector_registry = DetectorRegistry.get_instance()
         
         self.brain = None
         self.event_bus = None

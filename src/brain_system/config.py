@@ -13,6 +13,12 @@ from typing import Any, Callable, Optional
 ConfigListener = Callable[[dict[str, Any]], None]
 
 
+# 防止超大配置导致内存/解析 DoS
+MAX_CONFIG_SOURCE_FILE_BYTES = 1024 * 1024  # 1MB
+MAX_CONSUL_ITEMS = 1024
+MAX_CONSUL_VALUE_BYTES = 256 * 1024  # 256KB
+
+
 @dataclass(slots=True)
 class ConfigSource:
     """配置来源抽象。
@@ -42,7 +48,15 @@ class FileConfigSource(ConfigSource):
         if not self._path.exists():
             return {}
         try:
-            return json.loads(self._path.read_text(encoding="utf-8"))
+            if self._path.stat().st_size > MAX_CONFIG_SOURCE_FILE_BYTES:
+                logging.warning("配置文件过大，拒绝加载: %s", self._path)
+                return {}
+
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                logging.warning("配置文件根节点必须为对象(dict): %s", self._path)
+                return {}
+            return data
         except Exception as e:
             logging.warning("配置文件解析失败: %s", e)
             return {}
@@ -70,6 +84,9 @@ class FileConfigSource(ConfigSource):
 
     def stop_watch(self) -> None:
         self._stop.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=self._poll_seconds + 0.2)
+        self._thread = None
 
 
 class ConsulConfigSource(ConfigSource):
@@ -95,10 +112,16 @@ class ConsulConfigSource(ConfigSource):
         self._last_index = idx
         if not items:
             return {}
+        if isinstance(items, list) and len(items) > MAX_CONSUL_ITEMS:
+            logging.warning("Consul 配置项过多，已截断到前 %d 项", MAX_CONSUL_ITEMS)
+            items = items[:MAX_CONSUL_ITEMS]
         for it in items:
             key = it.get("Key")
             val = it.get("Value")
             if not key or val is None:
+                continue
+            if isinstance(val, (bytes, bytearray)) and len(val) > MAX_CONSUL_VALUE_BYTES:
+                logging.warning("Consul 配置值过大，已跳过键: %s", key)
                 continue
             try:
                 rel = str(key)[len(self._key_prefix) + 1 :]
@@ -126,3 +149,6 @@ class ConsulConfigSource(ConfigSource):
 
     def stop_watch(self) -> None:
         self._stop.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=self._poll_seconds + 0.2)
+        self._thread = None

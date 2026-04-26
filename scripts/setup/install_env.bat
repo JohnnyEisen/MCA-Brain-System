@@ -7,10 +7,18 @@ echo.
 
 REM 自动定位 Python 3.13
 set "PYTHON_EXE=python"
-if exist "C:\Users\20122\AppData\Local\Programs\Python\Python313\python.exe" (
-    set "PYTHON_EXE=C:\Users\20122\AppData\Local\Programs\Python\Python313\python.exe"
+set "PYTHON_FOUND=0"
+if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
+    set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+    set "PYTHON_FOUND=1"
     echo [Target] 检测到 Python 3.13: %PYTHON_EXE%
-) else (
+)
+if exist "C:\Python313\python.exe" (
+    set "PYTHON_EXE=C:\Python313\python.exe"
+    set "PYTHON_FOUND=1"
+    echo [Target] 检测到 Python 3.13: %PYTHON_EXE%
+)
+if "%PYTHON_FOUND%"=="0" (
     echo [Target] 使用默认 'python' 命令
 )
 

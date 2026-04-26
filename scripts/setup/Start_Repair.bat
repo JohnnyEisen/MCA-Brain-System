@@ -25,7 +25,7 @@ echo 使用 Python: "%PY_EXE%"
 echo.
 
 :: 2. Run Repair Script
-"%PY_EXE%" "%~dp0repair_mca_env.py"
+"%PY_EXE%" "%~dp0..\repair_mca_env.py"
 
 echo.
 echo Wrapper script finished.

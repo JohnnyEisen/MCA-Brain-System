@@ -1,6 +1,7 @@
 # --- UI ---
-sv-ttk>=2.5.0  # Dark theme
-tkinterweb>=3.19.0
+PySide6>=6.5.0
+# sv-ttk removed  # Dark theme
+# tkinterweb removed
 
 # --- Graph / Plotting ---
 networkx>=3.0
@@ -20,8 +21,9 @@ httpx>=0.28.0    # Updated: Fixed SSRF vulnerability GHSA-9c47-m6qq-7p4h
 # Only install when 'Brain' module is enabled.
 # Default CPU version, check gpu_setup.py for CUDA.
 # torch>=2.0.0 --index-url https://download.pytorch.org/whl/cu118
-transformers>=4.38.0
+# transformers>=4.38.0
 numpy>=1.26.0
 
 # --- Compat ---
 tomli>=2.0.1; python_version < "3.11"
+networkx

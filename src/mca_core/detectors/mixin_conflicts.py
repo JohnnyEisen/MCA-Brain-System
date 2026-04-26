@@ -19,6 +19,11 @@ class MixinConflictsDetector(Detector):
     _ERROR_PATTERNS = None
     _WARNING_PATTERNS = None
     _MIXIN_NAME_PATTERN = re.compile(r"mixins?[\._][\w\.]+", re.IGNORECASE)
+    _INVALID_INJECTION_PATTERN = re.compile(r"InvalidInjectionException", re.IGNORECASE)
+    _INVALID_DESCRIPTOR_PATTERN = re.compile(
+        r"Invalid descriptor on\s+([^:\n]+):([^\s\n]+)",
+        re.IGNORECASE
+    )
     
     @classmethod
     def _get_error_patterns(cls) -> List[re.Pattern]:
@@ -26,6 +31,8 @@ class MixinConflictsDetector(Detector):
             patterns = [
                 r"Mixin\s+(apply\s+)?failed",
                 r"Invalid\s+Mixin\s+configuration",
+                r"InvalidInjectionException",
+                r"Invalid\s+descriptor\s+on",
                 r"Mixin\s+transformation\s+error",
                 r"MixinApplyError",
                 r"MixinTransformerError",
@@ -52,6 +59,35 @@ class MixinConflictsDetector(Detector):
     
     def detect(self, crash_log: str, context: AnalysisContext) -> List[DetectionResult]:
         txt = crash_log or ""
+
+        # 强信号优先：InvalidInjectionException + Invalid descriptor on
+        has_invalid_injection = bool(self._INVALID_INJECTION_PATTERN.search(txt))
+        descriptor_match = self._INVALID_DESCRIPTOR_PATTERN.search(txt)
+        if has_invalid_injection:
+            context.add_result(
+                "Detected InvalidInjectionException: Mixin descriptor does not match target method signature.",
+                detector=self.get_name(),
+                cause_label=CAUSE_OTHER,
+            )
+
+            if descriptor_match:
+                context.add_result(
+                    f"  Faulty Mixin: {descriptor_match.group(1)}:{descriptor_match.group(2)}",
+                    detector=self.get_name(),
+                )
+            else:
+                line_match = re.search(r"^.*Invalid descriptor on.*$", txt, flags=re.IGNORECASE | re.MULTILINE)
+                if line_match:
+                    context.add_result(
+                        f"  Evidence: {line_match.group(0).strip()}",
+                        detector=self.get_name(),
+                    )
+
+            context.add_result(
+                "Suggestion: Update/remove the mod providing this mixin, or use a build matching Minecraft and Loader versions.",
+                detector=self.get_name(),
+            )
+            return context.results
         
         # Collect error signals
         error_matches = []

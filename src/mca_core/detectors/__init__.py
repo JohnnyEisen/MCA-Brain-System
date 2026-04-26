@@ -12,6 +12,13 @@ from .loader import LoaderDetector
 from .missing_geckolib import MissingGeckoLibDetector
 from .geckolib_more import GeckoLibMoreDetector
 from .gl_errors import GlErrorsDetector
+from .cache import DetectorCache, CacheEntry, CacheStats, get_detector_cache
+from .performance import (
+    PerformanceMonitor,
+    DetectorMetrics,
+    PerformanceReport,
+    get_performance_monitor,
+)
 
 __all__ = [
     "Detector",
@@ -29,4 +36,12 @@ __all__ = [
     "MissingGeckoLibDetector",
     "GeckoLibMoreDetector",
     "GlErrorsDetector",
+    "DetectorCache",
+    "CacheEntry",
+    "CacheStats",
+    "get_detector_cache",
+    "PerformanceMonitor",
+    "DetectorMetrics",
+    "PerformanceReport",
+    "get_performance_monitor",
 ]

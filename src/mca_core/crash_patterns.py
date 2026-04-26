@@ -1,5 +1,7 @@
 import re
-from typing import List, Dict, Any, Pattern
+from typing import List, Dict, Any, Optional
+
+from mca_core.regex_cache import RegexCache
 
 
 class CrashPatternLibrary:
@@ -30,60 +32,37 @@ class CrashPatternLibrary:
                 "advice": "GLFW 底层错误。可能是显卡驱动过旧、不支持 OpenGL 版本或被其他软件（如录屏软件、覆盖层）干扰。更新显卡驱动或关闭后台干扰软件。"
             }
         ]
-        
-        # 预编译正则表达式以提高性能
-        self._compiled_patterns: List[Dict[str, Any]] = []
-        self._compile_patterns()
-    
-    def _compile_patterns(self):
-        """预编译所有模式以提高匹配性能"""
-        for pattern in self.patterns:
-            compiled = {
-                "id": pattern["id"],
-                "name": pattern["name"],
-                "keywords": pattern["keywords"],
-                "advice": pattern["advice"],
-                "regexes": []
-            }
-            
-            for kw in pattern["keywords"]:
-                # 转义特殊正则字符，保留灵活性
-                try:
-                    # 尝试编译为正则表达式（支持更复杂的匹配模式）
-                    compiled["regexes"].append(re.compile(kw, re.IGNORECASE))
-                except re.error:
-                    # 如果失败，回退为简单字符串匹配（已转义）
-                    compiled["regexes"].append(None)
-            
-            self._compiled_patterns.append(compiled)
 
-    def match(self, log_content: str) -> List[Dict[str, Any]]:
-        matches = []
+    def match(self, log_content: Optional[str]) -> List[Dict[str, Any]]:
+        if log_content is None:
+            return []
         
-        for compiled in self._compiled_patterns:
+        matches = []
+        log_lower = log_content.lower()
+        
+        for pattern in self.patterns:
             score = 0
-            for i, regex in enumerate(compiled["regexes"]):
-                if regex is not None:
-                    # 使用预编译的正则表达式
-                    if regex.search(log_content):
+            keywords = pattern["keywords"]
+            
+            for kw in keywords:
+                try:
+                    if RegexCache.search(re.escape(kw), log_content, flags=re.IGNORECASE):
                         score += 1
-                else:
-                    # 回退到简单字符串匹配
-                    if compiled["keywords"][i] in log_content:
+                except re.error:
+                    if kw.lower() in log_lower:
                         score += 1
             
-            # 匹配逻辑：至少匹配2个关键词，或只有1个关键词且匹配了
             if score >= 2:
                 matches.append({
-                    "id": compiled["id"],
-                    "name": compiled["name"],
-                    "advice": compiled["advice"]
+                    "id": pattern["id"],
+                    "name": pattern["name"],
+                    "advice": pattern["advice"]
                 })
-            elif score == 1 and len(compiled["keywords"]) == 1:
+            elif score == 1 and len(keywords) == 1:
                 matches.append({
-                    "id": compiled["id"],
-                    "name": compiled["name"],
-                    "advice": compiled["advice"]
+                    "id": pattern["id"],
+                    "name": pattern["name"],
+                    "advice": pattern["advice"]
                 })
                 
         return matches

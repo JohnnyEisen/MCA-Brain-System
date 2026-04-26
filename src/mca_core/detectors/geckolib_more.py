@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, ClassVar
 
 from config.constants import CAUSE_GECKO
 from .base import Detector
@@ -9,20 +9,23 @@ from .contracts import AnalysisContext, DetectionResult
 
 
 class GeckoLibMoreDetector(Detector):
+    _RE_GECKOLIB: ClassVar[re.Pattern[str]] = re.compile(
+        r"(software\.bernie\.geckolib|software/bernie/geckolib)", re.IGNORECASE
+    )
+    _RE_MOD_INSTANCE: ClassVar[re.Pattern[str]] = re.compile(
+        r"Failed to create mod instance\.[\s\S]{0,120}?ModID:\s*([A-Za-z0-9_\-]+)",
+        re.IGNORECASE
+    )
+
     def detect(self, crash_log: str, context: AnalysisContext) -> List[DetectionResult]:
-        """扩展识别 GeckoLib 相关错误并输出建议。"""
         analyzer = context.analyzer
         txt = crash_log or ""
         found = set(getattr(analyzer, "geckolib_missing_mods", []) or [])
 
-        for _ in re.finditer(r"(software\.bernie\.geckolib|software/bernie/geckolib)", txt, flags=re.IGNORECASE):
+        for _ in self._RE_GECKOLIB.finditer(txt):
             found.add("GeckoLib")
 
-        for m in re.finditer(
-            r"Failed to create mod instance\.[\s\S]{0,120}?ModID:\s*([A-Za-z0-9_\-]+)",
-            txt,
-            flags=re.IGNORECASE,
-        ):
+        for m in self._RE_MOD_INSTANCE.finditer(txt):
             found.add(m.group(1))
 
         if found:

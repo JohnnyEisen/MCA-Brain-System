@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 
 from config.constants import CAUSE_DUP
 from .base import Detector
@@ -16,7 +16,6 @@ from .contracts import AnalysisContext, DetectionResult
 class DuplicateModsDetector(Detector):
     """Detect duplicate MOD/JAR (strict mode: must appear multiple times)."""
     
-    # Ignore prefixes (core libraries, allowed to repeat)
     IGNORE_PREFIXES = {
         "fmlcore", "client", "authlib", "fmlloader", "modlauncher",
         "bootstraplauncher", "forge", "minecraft", "netty", "libraries",
@@ -25,20 +24,35 @@ class DuplicateModsDetector(Detector):
         "log4j", "slf4j", "jline", "jna", "oshi", "mixin", "spongepowered",
     }
     
-    # Ignore keywords
     IGNORE_KEYWORDS = ("loader", "launcher", "bootstrap", "authlib", "client", 
                        "fml", "forge", "library", "libraries", "core")
     
-    # Precompiled pattern for performance
-    _JAR_PATTERN = re.compile(r"([A-Za-z0-9_\-]+-[0-9][A-Za-z0-9\.\-_]+)\.jar", re.IGNORECASE)
+    # 要求前缀以字母开头，避免将版本号片段误识别为 JAR 名（如 1-11.45.14.jar）
+    _JAR_PATTERN = re.compile(r"([A-Za-z][A-Za-z0-9_\-]*-[0-9][A-Za-z0-9\.\-_]+)\.jar", re.IGNORECASE)
+    _mod_patterns: ClassVar[dict[str, re.Pattern[str]]] = {}
+    _MOD_PATTERNS_MAX = 100
+
+    @classmethod
+    def _get_mod_pattern(cls, modid: str) -> re.Pattern[str]:
+        if modid in cls._mod_patterns:
+            return cls._mod_patterns[modid]
+        
+        if len(cls._mod_patterns) >= cls._MOD_PATTERNS_MAX:
+            oldest_key = next(iter(cls._mod_patterns))
+            cls._mod_patterns.pop(oldest_key)
+        
+        pattern = re.compile(
+            rf"{re.escape(modid)}-[0-9][A-Za-z0-9\.\-_]+\.jar",
+            re.IGNORECASE
+        )
+        cls._mod_patterns[modid] = pattern
+        return pattern
     
     def detect(self, crash_log: str, context: AnalysisContext) -> List[DetectionResult]:
-        """Detect possible duplicate JAR / MOD in log."""
         analyzer = context.analyzer
         
         duplicates = []
         
-        # Match all .jar file references using precompiled pattern
         jar_matches = self._JAR_PATTERN.findall(crash_log)
         jar_counts = Counter(jar_matches)
         
@@ -46,25 +60,24 @@ class DuplicateModsDetector(Detector):
             lowjar = jar.lower()
             base = lowjar.split("-", 1)[0]
             
-            # Filter core libraries
             if base in self.IGNORE_PREFIXES:
                 continue
             if any(k in lowjar for k in self.IGNORE_KEYWORDS):
                 continue
             
-            # Only report if appears 15+ times
             if count >= 15:
                 duplicates.append(f"{jar}.jar appears {count} times")
         
-        # Detect from analyzer.mods
         for modid, vers in analyzer.mods.items():
             if not modid:
                 continue
             low = modid.lower()
+            if not re.search(r"[a-z]", low):
+                continue
             if any(low.startswith(p) for p in self.IGNORE_PREFIXES):
                 continue
             
-            pattern = re.compile(rf"{re.escape(modid)}-[0-9][A-Za-z0-9\.\-_]+\.jar", re.IGNORECASE)
+            pattern = self._get_mod_pattern(modid)
             occurrences = len(pattern.findall(crash_log))
             
             if occurrences >= 15:
